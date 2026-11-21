@@ -1,0 +1,96 @@
+test_add_device_duplicate_and_invalid (test_project.FrameworkTests.test_add_device_duplicate_and_invalid) ... ok
+test_add_device_valid_types (test_project.FrameworkTests.test_add_device_valid_types) ... ok
+test_baseline_path (test_project.FrameworkTests.test_baseline_path) ... ok
+test_confidence_levels_calibrated_and_not_arbitrary_100 (test_project.FrameworkTests.test_confidence_levels_calibrated_and_not_arbitrary_100)
+Proves confidence levels reflect justification and do not claim 100% without direct certainty. ... ok
+test_configure_device_parameters (test_project.FrameworkTests.test_configure_device_parameters) ... ok
+test_configure_device_renaming (test_project.FrameworkTests.test_configure_device_renaming) ... ok
+test_configure_link_parameters (test_project.FrameworkTests.test_configure_link_parameters) ... ok
+test_connect_devices_and_attributes (test_project.FrameworkTests.test_connect_devices_and_attributes) ... ok
+test_copy_and_paste_single_device_preserves_config_no_links (test_project.FrameworkTests.test_copy_and_paste_single_device_preserves_config_no_links)
+Verifies copying a device preserves configuration, generates unique ID, and does not duplicate links. ... ok
+test_custom_topology_metrics (test_project.FrameworkTests.test_custom_topology_metrics) ... ok
+test_custom_topology_three_routes_discovery (test_project.FrameworkTests.test_custom_topology_three_routes_discovery) ... ok
+test_cut_device_and_paste (test_project.FrameworkTests.test_cut_device_and_paste)
+Verifies Cut removes device and its links from topology and allows pasting afterward. ... ok
+test_diagnose_dns_failure_from_resolution_evidence (test_project.FrameworkTests.test_diagnose_dns_failure_from_resolution_evidence)
+Proves DNS failure is diagnosed by distinguishing operational IP connectivity from failed DNS probe. ... ok
+test_diagnose_down_link_from_link_state (test_project.FrameworkTests.test_diagnose_down_link_from_link_state)
+Proves a DOWN link is diagnosed strictly from link-state telemetry observations. ... ok
+test_diagnose_high_latency_and_packet_loss_from_measurements (test_project.FrameworkTests.test_diagnose_high_latency_and_packet_loss_from_measurements)
+Proves high latency and packet loss are diagnosed from measured metric values exceeding thresholds. ... ok
+test_diagnose_invalid_gateway_from_configuration (test_project.FrameworkTests.test_diagnose_invalid_gateway_from_configuration)
+Proves an invalid gateway is diagnosed from configuration audit observations. ... ok
+test_diagnosis_cannot_access_fault_identifier (test_project.FrameworkTests.test_diagnosis_cannot_access_fault_identifier)
+Proves the diagnosis engine operates strictly on raw observations without fault metadata. ... ok
+test_diagnosis_independent_of_injected_fault_label (test_project.FrameworkTests.test_diagnosis_independent_of_injected_fault_label)
+Proves the diagnosis engine produces identical findings regardless of injected fault label. ... ok
+test_diagnosis_label_deliberately_changed_or_hidden (test_project.FrameworkTests.test_diagnosis_label_deliberately_changed_or_hidden)
+Proves diagnosis result remains unchanged when fault label is changed to a fake decoy. ... ok
+test_diagnostic_finding_backward_compatibility (test_project.FrameworkTests.test_diagnostic_finding_backward_compatibility)
+Proves DiagnosticFinding supports tuple unpacking and legacy index access. ... ok
+test_disconnect_devices (test_project.FrameworkTests.test_disconnect_devices) ... ok
+test_dns_repair_is_verified (test_project.FrameworkTests.test_dns_repair_is_verified) ... ok
+test_drag_and_drop_existing_devices (test_project.FrameworkTests.test_drag_and_drop_existing_devices) ... ok
+test_drag_and_drop_newly_added_device (test_project.FrameworkTests.test_drag_and_drop_newly_added_device) ... ok
+test_dragged_positions_preserved_across_save_and_load (test_project.FrameworkTests.test_dragged_positions_preserved_across_save_and_load) ... ok
+test_duplicate_device_shortcut (test_project.FrameworkTests.test_duplicate_device_shortcut)
+Verifies quick duplicate operation preserves configuration and assigns unique name. ... ok
+test_failed_links_strictly_excluded_from_selection (test_project.FrameworkTests.test_failed_links_strictly_excluded_from_selection) ... ok
+test_fault_injection_all_six_scenarios_and_backend_mapping (test_project.FrameworkTests.test_fault_injection_all_six_scenarios_and_backend_mapping)
+Verifies all six UI scenario options inject properly, map to backend, diagnose, and recover. ... ok
+test_gateway_repair_is_verified (test_project.FrameworkTests.test_gateway_repair_is_verified) ... ok
+test_keyboard_shortcut_safety_when_text_field_focused (test_project.FrameworkTests.test_keyboard_shortcut_safety_when_text_field_focused)
+Verifies keyboard shortcuts are not intercepted when editing text input fields. ... ok
+test_latency_and_loss_detected_and_rerouted (test_project.FrameworkTests.test_latency_and_loss_detected_and_rerouted) ... ok
+test_link_failure_uses_backup (test_project.FrameworkTests.test_link_failure_uses_backup) ... ok
+test_manually_added_device_participates_in_route (test_project.FrameworkTests.test_manually_added_device_participates_in_route) ... ok
+test_multiple_route_discovery_baseline (test_project.FrameworkTests.test_multiple_route_discovery_baseline) ... ok
+test_multiple_selection_and_copy_paste_relative_positions (test_project.FrameworkTests.test_multiple_selection_and_copy_paste_relative_positions)
+Verifies selecting multiple devices, copying them, and pasting preserves relative layout. ... ok
+test_multiple_simultaneous_faults_produce_multiple_findings (test_project.FrameworkTests.test_multiple_simultaneous_faults_produce_multiple_findings)
+Proves multiple simultaneous faults produce multiple distinct findings. ... ok
+test_packet_tracer_connect_tool_and_connection_types (test_project.FrameworkTests.test_packet_tracer_connect_tool_and_connection_types)
+Verifies connection management with cable types, duplicate prevention, and self-connection prevention. ... ok
+test_packet_tracer_device_palette_addition_and_inspection (test_project.FrameworkTests.test_packet_tracer_device_palette_addition_and_inspection)
+Verifies adding devices via palette and modifying parameters via Inspector. ... ok
+test_packet_tracer_dynamic_fault_injection_and_diagnosis (test_project.FrameworkTests.test_packet_tracer_dynamic_fault_injection_and_diagnosis)
+Verifies dynamic fault injection targeting arbitrary links and observation-based diagnosis. ... ok
+test_packet_tracer_fault_dropdown_ui_width_height_and_options (test_project.FrameworkTests.test_packet_tracer_fault_dropdown_ui_width_height_and_options)
+Verifies the scenario dropdown in Cisco Packet Tracer workspace has sufficient width, height, and options. ... ok
+test_packet_tracer_laptop_device_support (test_project.FrameworkTests.test_packet_tracer_laptop_device_support)
+Verifies Laptop end-device support in topology, addressing, and route discovery. ... ok
+test_packet_tracer_link_inspection_and_editing (test_project.FrameworkTests.test_packet_tracer_link_inspection_and_editing)
+Verifies selecting and editing link properties through Inspector tab. ... ok
+test_packet_tracer_palette_auto_naming (test_project.FrameworkTests.test_packet_tracer_palette_auto_naming)
+Verifies auto-generation of unique device names for all palette types. ... ok
+test_packet_tracer_recovery_and_verification_dynamic (test_project.FrameworkTests.test_packet_tracer_recovery_and_verification_dynamic)
+Verifies automated recovery restores health and reroutes on dynamic topologies. ... ok
+test_packet_tracer_save_and_load_with_laptops_and_connections (test_project.FrameworkTests.test_packet_tracer_save_and_load_with_laptops_and_connections)
+Verifies topology serialization and loading preserving Laptops and connection types. ... ok
+test_packet_tracer_workspace_tools_and_zoom (test_project.FrameworkTests.test_packet_tracer_workspace_tools_and_zoom)
+Verifies GUI mode switching, tool state, and zoom/pan functionality. ... ok
+test_prevent_deletion_of_essential_default_devices (test_project.FrameworkTests.test_prevent_deletion_of_essential_default_devices) ... ok
+test_prevent_duplicate_connection (test_project.FrameworkTests.test_prevent_duplicate_connection) ... ok
+test_prevent_self_connection (test_project.FrameworkTests.test_prevent_self_connection) ... ok
+test_recovery_uses_diagnosis_and_verifies_outcome (test_project.FrameworkTests.test_recovery_uses_diagnosis_and_verifies_outcome)
+Proves recovery engine executes repairs based on diagnosis findings and verifies outcome. ... ok
+test_remove_custom_device (test_project.FrameworkTests.test_remove_custom_device) ... ok
+test_repeated_pasting_unique_names_and_cascading_offset (test_project.FrameworkTests.test_repeated_pasting_unique_names_and_cascading_offset)
+Verifies repeated Ctrl+V creates distinct unique devices with cascading positions. ... ok
+test_reset_faults (test_project.FrameworkTests.test_reset_faults) ... ok
+test_route_ranking_equal_cost_latency_tiebreaker (test_project.FrameworkTests.test_route_ranking_equal_cost_latency_tiebreaker) ... ok
+test_route_selection_all_routes_degraded (test_project.FrameworkTests.test_route_selection_all_routes_degraded) ... ok
+test_route_selection_all_routes_down (test_project.FrameworkTests.test_route_selection_all_routes_down) ... ok
+test_route_selection_on_high_latency (test_project.FrameworkTests.test_route_selection_on_high_latency) ... ok
+test_route_selection_on_link_failure (test_project.FrameworkTests.test_route_selection_on_link_failure) ... ok
+test_route_selection_on_packet_loss (test_project.FrameworkTests.test_route_selection_on_packet_loss) ... ok
+test_save_and_load_topology (test_project.FrameworkTests.test_save_and_load_topology) ... ok
+test_topology_has_five_links_and_pc_connection (test_project.FrameworkTests.test_topology_has_five_links_and_pc_connection) ... ok
+test_undo_and_redo_device_and_link_operations (test_project.FrameworkTests.test_undo_and_redo_device_and_link_operations)
+Verifies undo and redo for device addition, connection, and deletion. ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 20.323s
+
+OK

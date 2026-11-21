@@ -1,0 +1,11 @@
+FINAL SUBMISSION CHECKLIST
+[ ] Run tests on the student's Windows computer.
+[ ] Launch GUI and capture baseline screenshot.
+[ ] Capture one screenshot for each of the five fault scenarios.
+[ ] Verify reset and CSV export manually.
+[ ] Fill in student/institution details on report cover.
+[ ] Review report against the instructor's required format.
+[ ] Rehearse presentation and viva.
+[ ] Keep a backup copy of the final source folder.
+
+Scope note: This is a graph-based simulation, not live packet forwarding or physical router automation.
