@@ -43,6 +43,10 @@ test_gateway_repair_is_verified (test_project.FrameworkTests.test_gateway_repair
 test_keyboard_shortcut_safety_when_text_field_focused (test_project.FrameworkTests.test_keyboard_shortcut_safety_when_text_field_focused)
 Verifies keyboard shortcuts are not intercepted when editing text input fields. ... ok
 test_latency_and_loss_detected_and_rerouted (test_project.FrameworkTests.test_latency_and_loss_detected_and_rerouted) ... ok
+test_link_failure_every_connection_and_dynamic_topology (test_project.FrameworkTests.test_link_failure_every_connection_and_dynamic_topology)
+Verifies Link Failure fault injection across every single connection in both default and custom topologies. ... ok
+test_link_failure_gui_dropdown_dialog_and_empty_topology (test_project.FrameworkTests.test_link_failure_gui_dropdown_dialog_and_empty_topology)
+Verifies GUI link selection dropdown, pick dialog, event logging, and empty/all-down edge cases. ... ok
 test_link_failure_uses_backup (test_project.FrameworkTests.test_link_failure_uses_backup) ... ok
 test_manually_added_device_participates_in_route (test_project.FrameworkTests.test_manually_added_device_participates_in_route) ... ok
 test_multiple_route_discovery_baseline (test_project.FrameworkTests.test_multiple_route_discovery_baseline) ... ok
@@ -91,6 +95,6 @@ test_undo_and_redo_device_and_link_operations (test_project.FrameworkTests.test_
 Verifies undo and redo for device addition, connection, and deletion. ... ok
 
 ----------------------------------------------------------------------
-Ran 62 tests in 20.323s
+Ran 64 tests in 33.178s
 
 OK

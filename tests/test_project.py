@@ -1562,74 +1562,76 @@ class FrameworkTests(unittest.TestCase):
     def test_link_failure_gui_dropdown_dialog_and_empty_topology(self):
         """Verifies GUI link selection dropdown, pick dialog, event logging, and empty/all-down edge cases."""
         import tkinter as tk
+        from unittest.mock import patch
         from main import App
 
         root = tk.Tk()
         try:
-            app = App(root)
-            root.update()
+            with patch("tkinter.messagebox.showwarning"), patch("tkinter.messagebox.showinfo"):
+                app = App(root)
+                root.update()
 
-            # 1. Test get_topology_link_labels() returns all current connections
-            labels = app.get_topology_link_labels()
-            self.assertEqual(len(labels), 5)
-            self.assertIn("PC1 \u2194 R1", labels)
-            self.assertIn("R1 \u2194 R2", labels)
-            self.assertIn("R2 \u2194 Server", labels)
-            self.assertIn("R1 \u2194 R3", labels)
-            self.assertIn("R3 \u2194 Server", labels)
+                # 1. Test get_topology_link_labels() returns all current connections
+                labels = app.get_topology_link_labels()
+                self.assertEqual(len(labels), 5)
+                self.assertIn("PC1 \u2194 R1", labels)
+                self.assertIn("R1 \u2194 R2", labels)
+                self.assertIn("R2 \u2194 Server", labels)
+                self.assertIn("R1 \u2194 R3", labels)
+                self.assertIn("R3 \u2194 Server", labels)
 
-            # 2. Select Link Failure scenario and verify target link controls appear
-            app.choice.set("Link Failure")
-            app._update_link_failure_controls()
-            self.assertEqual(list(app.target_link_combo["values"]), labels)
+                # 2. Select Link Failure scenario and verify target link controls appear
+                app.choice.set("Link Failure")
+                app._update_link_failure_controls()
+                self.assertEqual(list(app.target_link_combo["values"]), labels)
 
-            # 3. Select PC1 ↔ R1 and inject
-            app.target_link_choice.set("PC1 \u2194 R1")
-            app.inject()
-            root.update_idletasks()
-            self.assertEqual(app.g["PC1"]["R1"]["status"], "DOWN")
-            self.assertEqual(app.g["R1"]["R2"]["status"], "UP")
-            self.assertEqual(app.badge_lbl["text"], "CRITICAL")
-            self.assertIn("LINK DOWN: PC1 \u2194 R1", app.status_lbl["text"])
+                # 3. Select PC1 ↔ R1 and inject
+                app.target_link_choice.set("PC1 \u2194 R1")
+                app.inject()
+                root.update_idletasks()
+                self.assertEqual(app.g["PC1"]["R1"]["status"], "DOWN")
+                self.assertEqual(app.g["R1"]["R2"]["status"], "UP")
+                self.assertEqual(app.badge_lbl["text"], "CRITICAL")
+                self.assertIn("LINK DOWN: PC1 \u2194 R1", app.status_lbl["text"])
 
-            # Verify event log logged the failed link
-            log_entries = [line for line in app.history if "Link Failure on PC1 \u2194 R1" in str(line) or "Link Failure" in str(line)]
-            self.assertTrue(len(log_entries) > 0)
+                # Verify event log logged the failed link
+                log_entries = [line for line in app.history if "Link Failure on PC1 \u2194 R1" in str(line) or "Link Failure" in str(line)]
+                self.assertTrue(len(log_entries) > 0)
 
-            # Recover with PC1 ↔ R1 down -> RECOVERY UNAVAILABLE
-            app.recover()
-            root.update_idletasks()
-            self.assertIn("RECOVERY UNAVAILABLE", app.status_lbl["text"])
+                # Recover with PC1 ↔ R1 down -> RECOVERY UNAVAILABLE
+                app.recover()
+                root.update_idletasks()
+                self.assertIn("RECOVERY UNAVAILABLE", app.status_lbl["text"])
 
-            # 4. Reset, select R2 ↔ Server and inject
-            app.reset()
-            app.choice.set("Link Failure")
-            app._update_link_failure_controls()
-            app.target_link_choice.set("R2 \u2194 Server")
-            app.inject()
-            root.update_idletasks()
-            self.assertEqual(app.g["R2"]["Server"]["status"], "DOWN")
-            self.assertEqual(app.g["R1"]["R3"]["status"], "UP")
-            self.assertEqual(app.g["R3"]["Server"]["status"], "UP")
+                # 4. Reset, select R2 ↔ Server and inject
+                app.reset()
+                app.choice.set("Link Failure")
+                app._update_link_failure_controls()
+                app.target_link_choice.set("R2 \u2194 Server")
+                app.inject()
+                root.update_idletasks()
+                self.assertEqual(app.g["R2"]["Server"]["status"], "DOWN")
+                self.assertEqual(app.g["R1"]["R3"]["status"], "UP")
+                self.assertEqual(app.g["R3"]["Server"]["status"], "UP")
 
-            # Recover with R2 ↔ Server down -> RECOVERY VERIFIED & STABLE
-            app.recover()
-            root.update_idletasks()
-            self.assertIn("RECOVERY VERIFIED & STABLE", app.status_lbl["text"])
+                # Recover with R2 ↔ Server down -> RECOVERY VERIFIED & STABLE
+                app.recover()
+                root.update_idletasks()
+                self.assertIn("RECOVERY VERIFIED & STABLE", app.status_lbl["text"])
 
-            # 5. Empty topology edge case
-            app.g.clear()
-            app.refresh_target_link_options()
-            self.assertEqual(app.get_topology_link_labels(), [])
-            # Injecting on empty topology must not raise exception
-            app.inject()
+                # 5. Empty topology edge case
+                app.g.clear()
+                app.refresh_target_link_options()
+                self.assertEqual(app.get_topology_link_labels(), [])
+                # Injecting on empty topology must not raise exception
+                app.inject()
 
-            # 6. All links down edge case
-            app.reset()
-            for _, _, d in app.g.edges(data=True):
-                d["status"] = "DOWN"
-            app.choice.set("Link Failure")
-            app.inject()  # Gracefully handled without uncaught exception
+                # 6. All links down edge case
+                app.reset()
+                for _, _, d in app.g.edges(data=True):
+                    d["status"] = "DOWN"
+                app.choice.set("Link Failure")
+                app.inject()  # Gracefully handled without uncaught exception
         finally:
             root.update_idletasks()
             root.destroy()
