@@ -4593,26 +4593,92 @@ class DynamicEndpointsAndPacketTransmissionTests(unittest.TestCase):
                 # Verify top toolbar controls exist
                 self.assertTrue(hasattr(app, "top_source_combo"))
                 self.assertTrue(hasattr(app, "top_target_combo"))
+                self.assertTrue(hasattr(app, "top_packet_combo"))
                 self.assertEqual(app.source_choice.get(), "PC1")
                 self.assertEqual(app.target_choice.get(), "Server")
+                self.assertEqual(app.packet_count_choice.get(), "5")
 
-                # Change source and target
+                # Change source, target, and packet count
                 app.source_choice.set("PC1")
                 app.target_choice.set("R3")
+                app.packet_count_choice.set("10")
                 app.on_endpoint_changed()
                 self.assertEqual(app.state["source"], "PC1")
                 self.assertEqual(app.state["target"], "R3")
+                self.assertEqual(app.state["packet_count"], 10)
 
                 # Test recovery execution logs probe packet transmission
                 app.recover()
                 log_content = app.log.get("1.0", "end")
                 self.assertIn("Probe packet transmission", log_content)
-                self.assertIn("5/5 delivered", log_content)
+                self.assertIn("10/10 delivered", log_content)
         finally:
             try:
                 root.destroy()
             except Exception:
                 pass
+
+    def test_packet_count_customization(self):
+        """6. Recover & Verify accepts custom packet_count (10, 20) and transmits exact batch size."""
+        g = build_network()
+        g["R1"]["R2"]["status"] = "DOWN"
+
+        # 10 packets
+        res10 = recover(g, source="PC1", target="Server", packet_count=10)
+        pkt10 = res10.get("packet_transmission")
+        self.assertEqual(pkt10["packets_sent"], 10)
+        self.assertEqual(pkt10["packets_delivered"], 10)
+        self.assertEqual(pkt10["packets_dropped"], 0)
+        self.assertEqual(len(pkt10["packet_details"]), 10)
+        rep10 = format_recovery_report(res10)
+        self.assertIn("Packets Sent                : 10", rep10)
+        self.assertIn("Packets Delivered           : 10", rep10)
+
+        # 20 packets
+        res20 = recover(g, source="PC1", target="Server", packet_count=20)
+        pkt20 = res20.get("packet_transmission")
+        self.assertEqual(pkt20["packets_sent"], 20)
+        self.assertEqual(pkt20["packets_delivered"], 20)
+        self.assertEqual(len(pkt20["packet_details"]), 20)
+
+    def test_same_node_selection_handled_cleanly_loopback(self):
+        """7. Same-node selection (Source == Target) is handled cleanly as local loopback delivery."""
+        g = build_network()
+        res = recover(g, source="PC1", target="PC1", packet_count=5)
+        self.assertEqual(res["source"], "PC1")
+        self.assertEqual(res["target"], "PC1")
+        pkt = res.get("packet_transmission")
+        self.assertIsNotNone(pkt)
+        self.assertEqual(pkt["packets_sent"], 5)
+        self.assertEqual(pkt["packets_delivered"], 5)
+        self.assertEqual(pkt["packets_dropped"], 0)
+        self.assertEqual(pkt["delivery_rate_pct"], 100.0)
+        self.assertIn("PC1 (Local Loopback)", pkt["route_used"])
+        for p in pkt["packet_details"]:
+            self.assertEqual(p["status"], "DELIVERED")
+
+    def test_zero_corrective_actions_sets_recovery_unavailable_when_no_lower_loss_path(self):
+        """8. When 0 corrective actions executed and no lower-loss path exists, report sets RECOVERY UNAVAILABLE (not RECOVERY FAILED)."""
+        g = build_network()
+        # Active path is PC1 -> R1 -> R2 -> Server with 25% packet loss on R2-Server
+        g["R2"]["Server"]["packet_loss"] = 25.0
+        # Alternative path R1-R3-Server also has 30% loss (no lower-loss alternative exists)
+        g["R3"]["Server"]["packet_loss"] = 30.0
+
+        obs = collect_observations(g)
+        findings = diagnose(obs)
+        res = recover(g, findings=findings)
+
+        # Action Executed should be NO and Corrective Actions Executed must be 0
+        self.assertFalse(res["action_executed"])
+        self.assertEqual(res["corrective_actions_count"], 0)
+        self.assertEqual(res["status"], "RECOVERY UNAVAILABLE")
+        self.assertNotEqual(res["status"], "RECOVERY FAILED")
+
+        rep_c = format_recovery_report(res)
+        self.assertIn("Recovery Status             : RECOVERY UNAVAILABLE", rep_c)
+        self.assertIn("Corrective Actions Executed : 0", rep_c)
+        self.assertIn("Action Executed             : NO", rep_c)
 
 
 if __name__ == "__main__":

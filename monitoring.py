@@ -57,8 +57,12 @@ def analyze_network_partitions(g: nx.Graph, source=None, target=None) -> dict:
     src_dst_connected = False
     partition_blocks_traffic = False
     if source and target and source in g_op and target in g_op:
-        src_dst_connected = nx.has_path(g_op, source, target)
-        partition_blocks_traffic = not src_dst_connected
+        if source == target:
+            src_dst_connected = True
+            partition_blocks_traffic = False
+        else:
+            src_dst_connected = nx.has_path(g_op, source, target)
+            partition_blocks_traffic = not src_dst_connected
 
     # Down links contributing to partition
     down_links = [f"{u}-{v}" for u, v, d in g.edges(data=True) if d.get("status") != "UP"]
@@ -172,7 +176,12 @@ def collect_observations(g, state=None, source=None, target=None, latency_thresh
     elif best_candidate_path:
         observed_path = best_candidate_path
 
-    if observed_path and len(observed_path) >= 2:
+    if observed_path and len(observed_path) == 1 and observed_path[0] in g:
+        e2e_latency = 0.1
+        path_loss = 0.0
+        max_link_loss = 0.0
+        reachability = True
+    elif observed_path and len(observed_path) >= 2:
         path_edges = [g[u][v] for u, v in zip(observed_path, observed_path[1:]) if g.has_edge(u, v)]
         e2e_latency = round(sum(float(e.get("latency_ms", 2.0)) for e in path_edges), 2)
         # Probabilistic end-to-end packet loss assuming independent link loss probabilities

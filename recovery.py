@@ -56,7 +56,37 @@ def transmit_test_packets(g: nx.Graph, source: Optional[str] = None, target: Opt
     Returns:
         dict: Structured packet transmission summary.
     """
+    try:
+        count = int(count)
+        if count <= 0:
+            count = 5
+    except (ValueError, TypeError):
+        count = 5
+
     src, dst = resolve_endpoints(g, source, target)
+
+    # Cleanly handle same-node selection (Local Loopback)
+    if src and dst and src == dst and src in g:
+        packet_details = []
+        for i in range(1, count + 1):
+            packet_details.append({
+                "packet_number": i,
+                "status": "DELIVERED",
+                "rtt_ms": 0.1,
+                "reason": "Local loopback delivery (same-node endpoint)"
+            })
+        return {
+            "source": src,
+            "target": dst,
+            "count": count,
+            "packets_sent": count,
+            "packets_delivered": count,
+            "packets_dropped": 0,
+            "delivery_rate_pct": 100.0,
+            "route_used": f"{src} (Local Loopback)",
+            "avg_rtt_ms": 0.1,
+            "packet_details": packet_details
+        }
 
     # Check if route provided and valid
     route = list(path) if path else get_active_route(g, src, dst)
@@ -200,18 +230,19 @@ def transmit_test_packets(g: nx.Graph, source: Optional[str] = None, target: Opt
     }
 
 
-def recover(g, state=None, findings=None, source=None, target=None, plan=None, policy=RoutePolicy.BALANCED, **kwargs):
+def recover(g, state=None, findings=None, source=None, target=None, plan=None, policy=RoutePolicy.BALANCED, packet_count=None, **kwargs):
     """Execute fault-specific automated recovery actions based on a coordinated global recovery plan,
     with transactional safety, adaptive fallback, and post-recovery verification.
     
     Parameters:
         g (nx.Graph): Network graph topology.
-        state (dict, optional): May contain endpoint selections (source, target).
+        state (dict, optional): May contain endpoint selections (source, target, packet_count).
         findings (list, optional): Diagnostic findings from diagnostics.diagnose().
         source (str, optional): Source node override.
         target (str, optional): Target node override.
         plan (RecoveryPlan, optional): Pre-computed recovery plan override.
         policy (str): Route optimization policy for planner.
+        packet_count (int, optional): Number of probe packets to transmit on verification.
         
     Returns:
         dict: Recovery execution report with execution ID, executed actions, before/after states,
@@ -220,6 +251,19 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
     execution_start = time.time()
     execution_counter = int(execution_start * 1000) % 10000
     execution_id = f"EXEC-{execution_counter:04d}"
+
+    # Resolve packet count
+    pkt_count = packet_count
+    if pkt_count is None and isinstance(state, dict):
+        pkt_count = state.get("packet_count") or state.get("packets")
+    if pkt_count is None:
+        pkt_count = kwargs.get("packet_count") or kwargs.get("packets", 5)
+    try:
+        pkt_count = int(pkt_count)
+        if pkt_count <= 0:
+            pkt_count = 5
+    except (ValueError, TypeError):
+        pkt_count = 5
 
     actions_executed_log = []
     action_details = []
@@ -626,6 +670,8 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
     diagnosed_causes = {getattr(f, "root_cause", f[0]) for f in findings}
     if (has_link_failure or has_partition) and (plan.decision == RecoveryDecision.NO_FEASIBLE_RECOVERY or not post_obs["reachability"]):
         status_msg = "RECOVERY UNAVAILABLE"
+    elif plan.decision == RecoveryDecision.SERVICE_ALREADY_MAINTAINED or (has_link_failure and not action_executed and service_available and not has_loss_fault and not has_latency_fault):
+        status_msg = "SERVICE MAINTAINED"
     elif has_latency_fault and latency_success is False and len(diagnosed_causes) == 1:
         status_msg = "OPTIMIZATION UNAVAILABLE"
     elif has_loss_fault and loss_success is False and len(diagnosed_causes) == 1:
@@ -634,10 +680,16 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         status_msg = "RECOVERY UNAVAILABLE"
     elif plan.decision == RecoveryDecision.PARTIAL_RECOVERY_REQUIRED or is_partial_recovery:
         status_msg = "PARTIAL RECOVERY"
-    elif not verification_passed:
-        status_msg = "RECOVERY FAILED"
     elif plan.decision == RecoveryDecision.SERVICE_ALREADY_MAINTAINED or (has_link_failure and not action_executed and service_available):
         status_msg = "SERVICE MAINTAINED"
+    elif not action_executed and not verification_passed:
+        # If 0 corrective actions executed and no feasible alternative exists, report RECOVERY UNAVAILABLE
+        if has_latency_fault and len(diagnosed_causes) == 1:
+            status_msg = "OPTIMIZATION UNAVAILABLE"
+        else:
+            status_msg = "RECOVERY UNAVAILABLE"
+    elif not verification_passed:
+        status_msg = "RECOVERY FAILED"
     elif not action_executed:
         status_msg = "NO RECOVERY REQUIRED"
     else:
@@ -647,6 +699,7 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         reason_str = "A healthy alternative route was already active; no routing change was required."
     elif status_msg in ("RECOVERY UNAVAILABLE", "OPTIMIZATION UNAVAILABLE"):
         reason_str = "No feasible automated recovery path or corrective action exists for the current fault state."
+        verified = False
     elif status_msg == "RECOVERY FAILED":
         if not post_obs.get("reachability"):
             reason_str = "Post-recovery verification failed: destination endpoint remains unreachable."
@@ -678,7 +731,7 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
     }
 
     # 10. Probe Packet Transmission along verified forwarding route
-    packet_res = transmit_test_packets(g, source=src, target=dst, path=active_route, count=5)
+    packet_res = transmit_test_packets(g, source=src, target=dst, path=active_route, count=pkt_count)
 
     duration_ms = round((time.time() - execution_start) * 1000.0, 2)
     corrective_actions_count = len([a for a in action_details if a.get("action_id")]) if action_executed else 0
@@ -687,6 +740,7 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         "execution_id": execution_id,
         "source": src,
         "target": dst,
+        "packet_count": pkt_count,
         "actions": actions_executed_log,
         "action_details": action_details,
         "action_executed": action_executed,

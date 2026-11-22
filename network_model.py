@@ -360,10 +360,10 @@ def resolve_endpoints(g, source=None, target=None):
 
 def calculate_route_metrics(g, path):
     """Calculate comprehensive link and path metrics for a route."""
-    if not path or len(path) < 2:
+    if not path:
         return {
-            "path": path or [],
-            "path_str": " -> ".join(path) if path else "None",
+            "path": [],
+            "path_str": "None",
             "hop_count": 0,
             "cost": 0,
             "latency_ms": 0.0,
@@ -372,7 +372,23 @@ def calculate_route_metrics(g, path):
             "is_usable": False,
             "is_degraded": False,
             "availability": "Unavailable",
-            "bottlenecks": ["Invalid or single-node path"]
+            "bottlenecks": ["Empty path"]
+        }
+    if len(path) == 1:
+        node = path[0]
+        in_g = node in g
+        return {
+            "path": path,
+            "path_str": f"{node} (Local Loopback)",
+            "hop_count": 0,
+            "cost": 0,
+            "latency_ms": 0.1,
+            "max_loss": 0.0,
+            "avg_loss": 0.0,
+            "is_usable": in_g,
+            "is_degraded": False,
+            "availability": "Healthy" if in_g else "Unavailable",
+            "bottlenecks": [] if in_g else ["Node not in topology"]
         }
 
     missing_edges = []
@@ -440,8 +456,10 @@ def calculate_route_metrics(g, path):
 def discover_routes(g, source=None, target=None):
     """Discover all simple loopless routes between source and target, evaluated with metrics."""
     src, dst = resolve_endpoints(g, source, target)
-    if not src or not dst or src not in g or dst not in g or src == dst:
+    if not src or not dst or src not in g or dst not in g:
         return []
+    if src == dst:
+        return [calculate_route_metrics(g, [src])]
 
     try:
         paths = list(nx.all_simple_paths(g, src, dst))
@@ -596,7 +614,11 @@ def path_cost(g, path):
 
 def path_is_usable(g, path):
     """Check if all links on path exist and have status 'UP'."""
-    return bool(path) and len(path) >= 2 and all(
+    if not path:
+        return False
+    if len(path) == 1:
+        return path[0] in g
+    return all(
         g.has_edge(a, b) and g[a][b].get("status") == "UP" for a, b in zip(path, path[1:])
     )
 
@@ -610,6 +632,8 @@ def get_active_route(g, source=None, target=None):
     if not g or g.number_of_nodes() == 0:
         return None
     src, dst = resolve_endpoints(g, source, target)
+    if src and dst and src == dst and src in g:
+        return [src]
     active = g.graph.get("active_path")
     if active and isinstance(active, (list, tuple)) and len(active) >= 2:
         if active[0] == src and active[-1] == dst:

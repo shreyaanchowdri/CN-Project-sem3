@@ -133,6 +133,7 @@ class App:
         # Route Endpoints State (Dynamic Parameterization)
         self.source_choice = tk.StringVar(value="PC1")
         self.target_choice = tk.StringVar(value="Server")
+        self.packet_count_choice = tk.StringVar(value="5")
 
         # Apply Cisco Packet Tracer Styling
         self._apply_theme()
@@ -477,8 +478,19 @@ class App:
             width=8,
             height=8
         )
-        self.top_target_combo.pack(side="left", padx=(1, 6))
+        self.top_target_combo.pack(side="left", padx=(1, 4))
         self.top_target_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
+
+        tk.Label(sim_left, text="Packets:", bg="#0f172a", fg="#cbd5e1", font=("Segoe UI", 8, "bold")).pack(side="left", padx=(4, 1))
+        self.top_packet_combo = ttk.Combobox(
+            sim_left,
+            textvariable=self.packet_count_choice,
+            values=["5", "10", "20"],
+            state="readonly",
+            width=4,
+            height=4
+        )
+        self.top_packet_combo.pack(side="left", padx=(1, 6))
         tk.Frame(sim_left, bg="#334155", width=1, height=18).pack(side="left", padx=4)
 
         # Simulation Action Buttons
@@ -1280,6 +1292,18 @@ class App:
         self.target_combo = ttk.Combobox(ep_f, textvariable=self.target_choice, state="readonly", width=8)
         self.target_combo.grid(row=0, column=3, padx=2)
         self.target_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
+
+        ttk.Label(ep_f, text="Packets:").grid(row=0, column=4, sticky="w", padx=(6, 2))
+        if not hasattr(self, "packet_count_choice"):
+            self.packet_count_choice = tk.StringVar(value="5")
+        self.packet_combo = ttk.Combobox(
+            ep_f,
+            textvariable=self.packet_count_choice,
+            values=["5", "10", "20"],
+            state="readonly",
+            width=4
+        )
+        self.packet_combo.grid(row=0, column=5, padx=2)
 
         # Device Inventory
         ttk.Label(tab_ov, text="Device Table:", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(4, 1))
@@ -2609,8 +2633,13 @@ class App:
             self.state = {"fault": "No fault"}
         src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
         dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        try:
+            pkt_cnt = int(self.packet_count_choice.get()) if hasattr(self, "packet_count_choice") else 5
+        except (ValueError, TypeError):
+            pkt_cnt = 5
         self.state["source"] = src
         self.state["target"] = dst
+        self.state["packet_count"] = pkt_cnt
 
         # Stage 1: Network Monitoring Module (telemetry observations only)
         self.obs = collect_observations(self.g, self.state, source=src, target=dst)
@@ -2648,11 +2677,16 @@ class App:
         start = time.perf_counter()
         src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
         dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        try:
+            pkt_cnt = int(self.packet_count_choice.get()) if hasattr(self, "packet_count_choice") else 5
+        except (ValueError, TypeError):
+            pkt_cnt = 5
         self.state["source"] = src
         self.state["target"] = dst
+        self.state["packet_count"] = pkt_cnt
 
         # Stage 3: Fault-Specific Automated Recovery & Stage 4: Post-Recovery Verification
-        result = recover(self.g, self.state, findings=self.findings, source=src, target=dst)
+        result = recover(self.g, self.state, findings=self.findings, source=src, target=dst, packet_count=pkt_cnt)
         self.rec_time = time.perf_counter() - start
         metrics = make_metrics(self.g, result["route"], self.diag_time, self.rec_time)
 
@@ -2835,8 +2869,13 @@ class App:
     def on_endpoint_changed(self):
         src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
         dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        try:
+            pkt_cnt = int(self.packet_count_choice.get()) if hasattr(self, "packet_count_choice") else 5
+        except (ValueError, TypeError):
+            pkt_cnt = 5
         self.state["source"] = src
         self.state["target"] = dst
+        self.state["packet_count"] = pkt_cnt
         self.update_route_comparison()
         self.draw()
         self.log_event(f"Changed path endpoints: {src} -> {dst}")
