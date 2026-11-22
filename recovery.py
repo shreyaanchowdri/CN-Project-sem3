@@ -23,7 +23,11 @@ from network_model import (
     set_active_route,
     calculate_route_metrics
 )
-from monitoring import collect_observations
+from monitoring import (
+    collect_observations,
+    analyze_network_partitions,
+    calculate_path_packet_loss_probabilistic
+)
 from diagnostics import diagnose, DiagnosticFinding
 from scenario_manager import capture_network_snapshot, restore_network_snapshot
 from recovery_planner import (
@@ -34,6 +38,166 @@ from recovery_planner import (
     generate_recovery_plan,
     format_plan_report
 )
+
+
+def transmit_test_packets(g: nx.Graph, source: Optional[str] = None, target: Optional[str] = None, path: Optional[List[str]] = None, count: int = 5) -> Dict[str, Any]:
+    """Transmit a batch of probe/test packets from source to target along the active/candidate route.
+    
+    Evaluates hop-by-hop traversal, link operational states, and packet loss.
+    Records DROPPED_NO_ROUTE when no operational path to target exists.
+    
+    Parameters:
+        g (nx.Graph): Network topology graph.
+        source (str, optional): Source endpoint.
+        target (str, optional): Target endpoint.
+        path (list, optional): Route to traverse. If omitted, uses active route in g.
+        count (int): Number of probe packets to transmit (default 5).
+        
+    Returns:
+        dict: Structured packet transmission summary.
+    """
+    src, dst = resolve_endpoints(g, source, target)
+
+    # Check if route provided and valid
+    route = list(path) if path else get_active_route(g, src, dst)
+
+    # If route doesn't match endpoints or is invalid, search for usable route
+    if route and (route[0] != src or route[-1] != dst):
+        usable_routes = [r for r in discover_routes(g, source=src, target=dst) if r.get("is_usable")]
+        route = usable_routes[0]["path"] if usable_routes else None
+
+    # Check partition status
+    part_info = analyze_network_partitions(g, source=src, target=dst)
+    is_connected = part_info.get("source_target_connected", False) if (src and dst and src in g and dst in g) else False
+
+    # If route is not usable or endpoints are partitioned
+    if not route or not is_connected or not path_is_usable(g, route):
+        packet_details = []
+        for i in range(1, count + 1):
+            packet_details.append({
+                "packet_number": i,
+                "status": "DROPPED_NO_ROUTE",
+                "rtt_ms": None,
+                "reason": f"No operational route between {src} and {dst} (Partitioned)"
+            })
+        return {
+            "source": src,
+            "target": dst,
+            "count": count,
+            "packets_sent": count,
+            "packets_delivered": 0,
+            "packets_dropped": count,
+            "delivery_rate_pct": 0.0,
+            "route_used": "None (No Path)",
+            "avg_rtt_ms": None,
+            "packet_details": packet_details
+        }
+
+    route_edges = [g[u][v] for u, v in zip(route, route[1:]) if g.has_edge(u, v)]
+
+    # Check if any link on path is DOWN
+    down_on_path = [f"{u}-{v}" for u, v in zip(route, route[1:]) if g.has_edge(u, v) and g[u][v].get("status") != "UP"]
+    if down_on_path:
+        packet_details = []
+        for i in range(1, count + 1):
+            packet_details.append({
+                "packet_number": i,
+                "status": "DROPPED_LINK_DOWN",
+                "rtt_ms": None,
+                "reason": f"Traversed link {down_on_path[0]} is DOWN"
+            })
+        return {
+            "source": src,
+            "target": dst,
+            "count": count,
+            "packets_sent": count,
+            "packets_delivered": 0,
+            "packets_dropped": count,
+            "delivery_rate_pct": 0.0,
+            "route_used": " -> ".join(route),
+            "avg_rtt_ms": None,
+            "packet_details": packet_details
+        }
+
+    # Check host default gateway validity
+    if src in g.nodes and g.nodes[src].get("type") in ("PC", "Laptop"):
+        gw = g.nodes[src].get("gateway")
+        gw_valid = (gw in g.nodes and g.nodes[gw].get("type") == "Router" and nx.has_path(g, src, gw))
+        if not gw_valid:
+            packet_details = []
+            for i in range(1, count + 1):
+                packet_details.append({
+                    "packet_number": i,
+                    "status": "DROPPED_GATEWAY_INVALID",
+                    "rtt_ms": None,
+                    "reason": f"Configured default gateway '{gw}' is invalid"
+                })
+            return {
+                "source": src,
+                "target": dst,
+                "count": count,
+                "packets_sent": count,
+                "packets_delivered": 0,
+                "packets_dropped": count,
+                "delivery_rate_pct": 0.0,
+                "route_used": " -> ".join(route),
+                "avg_rtt_ms": None,
+                "packet_details": packet_details
+            }
+
+    # Calculate route latency and probabilistic packet loss
+    total_lat = sum(float(e.get("latency_ms", 2.0)) for e in route_edges)
+    path_loss_pct = calculate_path_packet_loss_probabilistic(route_edges)
+    loss_prob = path_loss_pct / 100.0
+
+    import random
+    packet_details = []
+    delivered = 0
+    rtts = []
+
+    for i in range(1, count + 1):
+        if loss_prob >= 1.0:
+            is_drop = True
+        elif loss_prob <= 0.0:
+            is_drop = False
+        else:
+            is_drop = (random.random() < loss_prob)
+
+        if is_drop:
+            packet_details.append({
+                "packet_number": i,
+                "status": "DROPPED_PACKET_LOSS",
+                "rtt_ms": None,
+                "reason": f"Packet dropped due to link packet loss ({path_loss_pct}%)"
+            })
+        else:
+            delivered += 1
+            jitter = round((((i * 13) % 5) - 2) * 0.1, 1)
+            pkt_rtt = max(1.0, round(total_lat + jitter, 1))
+            rtts.append(pkt_rtt)
+            packet_details.append({
+                "packet_number": i,
+                "status": "DELIVERED",
+                "rtt_ms": pkt_rtt,
+                "reason": "Delivered successfully"
+            })
+
+    dropped = count - delivered
+    rate = round((delivered / count) * 100.0, 1)
+    avg_rtt = round(sum(rtts) / len(rtts), 2) if rtts else None
+
+    return {
+        "source": src,
+        "target": dst,
+        "count": count,
+        "packets_sent": count,
+        "packets_delivered": delivered,
+        "packets_dropped": dropped,
+        "delivery_rate_pct": rate,
+        "route_used": " -> ".join(route),
+        "avg_rtt_ms": avg_rtt,
+        "packet_details": packet_details
+    }
 
 
 def recover(g, state=None, findings=None, source=None, target=None, plan=None, policy=RoutePolicy.BALANCED, **kwargs):
@@ -513,11 +677,16 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         "packet_loss_pct": post_obs.get("path_packet_loss") if ip_ok else 100.0
     }
 
+    # 10. Probe Packet Transmission along verified forwarding route
+    packet_res = transmit_test_packets(g, source=src, target=dst, path=active_route, count=5)
+
     duration_ms = round((time.time() - execution_start) * 1000.0, 2)
     corrective_actions_count = len([a for a in action_details if a.get("action_id")]) if action_executed else 0
 
     res_dict = {
         "execution_id": execution_id,
+        "source": src,
+        "target": dst,
         "actions": actions_executed_log,
         "action_details": action_details,
         "action_executed": action_executed,
@@ -540,6 +709,12 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         "route_selection": post_obs["route_selection"],
         "post_observations": post_obs,
         "verification_checks": verification_checks,
+        "packet_transmission": packet_res,
+        "packet_summary": packet_res,
+        "packets_sent": packet_res["packets_sent"],
+        "packets_delivered": packet_res["packets_delivered"],
+        "packets_dropped": packet_res["packets_dropped"],
+        "delivery_rate_pct": packet_res["delivery_rate_pct"],
         "plan": plan,
         "fallback_used": fallback_used,
         "rollback_occurred": rollback_occurred,
@@ -607,6 +782,37 @@ def format_recovery_report(result):
             lines.append(f"• {a}")
         lines.append("")
 
+    # Packet Transmission Summary
+    pkt_res = result.get("packet_transmission")
+    if pkt_res:
+        src_ep = pkt_res.get("source", result.get("source", "PC1"))
+        dst_ep = pkt_res.get("target", result.get("target", "Server"))
+        p_sent = pkt_res.get("packets_sent", 5)
+        p_deliv = pkt_res.get("packets_delivered", 0)
+        p_drop = pkt_res.get("packets_dropped", 0)
+        deliv_rate = pkt_res.get("delivery_rate_pct", 0.0)
+        route_used = pkt_res.get("route_used", "None")
+
+        lines.append("=== PROBE PACKET TRANSMISSION SUMMARY ===")
+        lines.append(f"Source Endpoint             : {src_ep}")
+        lines.append(f"Destination Endpoint        : {dst_ep}")
+        lines.append(f"Packets Sent                : {p_sent}")
+        lines.append(f"Packets Delivered           : {p_deliv}")
+        lines.append(f"Packets Dropped             : {p_drop}")
+        lines.append(f"Delivery Rate               : {deliv_rate}%")
+        lines.append(f"Route Used                  : {route_used}")
+        lines.append("Per-Packet Transmission Status:")
+        for pkt in pkt_res.get("packet_details", []):
+            p_num = pkt.get("packet_number", 1)
+            p_stat = pkt.get("status", "UNKNOWN")
+            if p_stat == "DELIVERED":
+                rtt = pkt.get("rtt_ms", 0.0)
+                lines.append(f"• Packet #{p_num}: {p_stat} (RTT: {rtt} ms)")
+            else:
+                reason = pkt.get("reason", "Drop")
+                lines.append(f"• Packet #{p_num}: {p_stat} ({reason})")
+        lines.append("")
+
     return "\n".join(lines).rstrip()
 
 
@@ -623,6 +829,8 @@ def format_verification_report(result):
     loss = checks.get("packet_loss_pct")
     loss_str = f"{loss}%" if loss is not None else "N/A"
 
+    src = result.get("source", "PC1")
+    dst = result.get("target", "Server")
     service_avail = result.get("service_availability", "AVAILABLE" if result.get("verified") else "UNAVAILABLE")
     net_health = result.get("network_health", "HEALTHY" if result.get("verified") else "CRITICAL")
     action_exec_str = "YES" if result.get("action_executed") else "NO"
@@ -630,6 +838,7 @@ def format_verification_report(result):
 
     lines = [
         "=== POST-RECOVERY VERIFICATION REPORT ===",
+        f"Target Endpoint Pair    : {src} -> {dst}",
         f"Overall Recovery Status : {result.get('status', 'UNKNOWN')}",
         f"Service Availability    : {service_avail}",
         f"Network Health          : {net_health}",

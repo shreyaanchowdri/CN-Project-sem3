@@ -187,7 +187,8 @@ def collect_observations(g, state=None, source=None, target=None, latency_thresh
 
     # Default Gateway Audit
     invalid_gateways = []
-    gw = g.nodes["PC1"].get("gateway", g.graph.get("gateway", "R1")) if "PC1" in g.nodes else g.graph.get("gateway", "R1")
+    host_to_audit = src if (src in g.nodes and g.nodes[src].get("type") in ("PC", "Laptop")) else ("PC1" if "PC1" in g.nodes else None)
+    gw = g.nodes[host_to_audit].get("gateway", g.graph.get("gateway", "R1")) if host_to_audit else g.graph.get("gateway", "R1")
 
     for node, data in g.nodes(data=True):
         if data.get("type") in ("PC", "Laptop"):
@@ -221,11 +222,11 @@ def collect_observations(g, state=None, source=None, target=None, latency_thresh
                             "reason": f"Path between host '{node}' and gateway '{node_gw}' is DOWN"
                         })
 
-    if "PC1" in g.nodes:
-        pc1_gw = g.nodes["PC1"].get("gateway", gw)
-        gateway_ok = not any(ig["host"] == "PC1" for ig in invalid_gateways) and (
-            pc1_gw in ("R1", "192.168.1.1") or (
-                pc1_gw in g.nodes and g.nodes[pc1_gw].get("type") == "Router" and nx.has_path(g, "PC1", pc1_gw)
+    if host_to_audit:
+        h_gw = g.nodes[host_to_audit].get("gateway", gw)
+        gateway_ok = not any(ig["host"] == host_to_audit for ig in invalid_gateways) and (
+            h_gw in ("R1", "192.168.1.1") or (
+                h_gw in g.nodes and g.nodes[h_gw].get("type") == "Router" and nx.has_path(g, host_to_audit, h_gw)
             )
         )
     else:

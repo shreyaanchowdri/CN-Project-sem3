@@ -617,6 +617,11 @@ def get_active_route(g, source=None, target=None):
     # Default baseline primary path PC1 -> R1 -> R2 -> Server if configured
     if src == "PC1" and dst == "Server" and all(n in g for n in ["PC1", "R1", "R2", "Server"]):
         return ["PC1", "R1", "R2", "Server"]
+    # For other endpoints, if operational shortest path exists, return default route
+    if src and dst and src in g and dst in g:
+        sp = shortest_path(g, src, dst)
+        if sp:
+            return sp
     return list(active) if active else None
 
 def set_active_route(g, path):

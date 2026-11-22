@@ -130,6 +130,10 @@ class App:
         self.last_recovery_service_availability = "AVAILABLE"
         self.last_recovery_network_health = "HEALTHY"
 
+        # Route Endpoints State (Dynamic Parameterization)
+        self.source_choice = tk.StringVar(value="PC1")
+        self.target_choice = tk.StringVar(value="Server")
+
         # Apply Cisco Packet Tracer Styling
         self._apply_theme()
 
@@ -451,6 +455,31 @@ class App:
             relief="flat", padx=6, pady=2, cursor="hand2",
             command=self.show_link_selection_dialog
         ).pack(side="left", padx=2)
+
+        # Dynamic Endpoint Selectors on Top Simulation Toolbar
+        tk.Frame(sim_left, bg="#334155", width=1, height=18).pack(side="left", padx=4)
+        tk.Label(sim_left, text="Source:", bg="#0f172a", fg="#cbd5e1", font=("Segoe UI", 8, "bold")).pack(side="left", padx=(4, 1))
+        self.top_source_combo = ttk.Combobox(
+            sim_left,
+            textvariable=self.source_choice,
+            state="readonly",
+            width=8,
+            height=8
+        )
+        self.top_source_combo.pack(side="left", padx=(1, 4))
+        self.top_source_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
+
+        tk.Label(sim_left, text="Target:", bg="#0f172a", fg="#cbd5e1", font=("Segoe UI", 8, "bold")).pack(side="left", padx=(4, 1))
+        self.top_target_combo = ttk.Combobox(
+            sim_left,
+            textvariable=self.target_choice,
+            state="readonly",
+            width=8,
+            height=8
+        )
+        self.top_target_combo.pack(side="left", padx=(1, 6))
+        self.top_target_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
+        tk.Frame(sim_left, bg="#334155", width=1, height=18).pack(side="left", padx=4)
 
         # Simulation Action Buttons
         tk.Button(sim_left, text="⚡ Inject Fault", font=("Segoe UI", 8, "bold"), bg="#dc2626", fg="#ffffff",
@@ -1239,13 +1268,15 @@ class App:
         ep_f = ttk.Frame(ep_box)
         ep_f.pack(fill="x")
         ttk.Label(ep_f, text="Source:").grid(row=0, column=0, sticky="w")
-        self.source_choice = tk.StringVar(value="PC1")
+        if not hasattr(self, "source_choice"):
+            self.source_choice = tk.StringVar(value="PC1")
         self.source_combo = ttk.Combobox(ep_f, textvariable=self.source_choice, state="readonly", width=8)
         self.source_combo.grid(row=0, column=1, padx=2)
         self.source_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
 
         ttk.Label(ep_f, text="Target:").grid(row=0, column=2, sticky="w")
-        self.target_choice = tk.StringVar(value="Server")
+        if not hasattr(self, "target_choice"):
+            self.target_choice = tk.StringVar(value="Server")
         self.target_combo = ttk.Combobox(ep_f, textvariable=self.target_choice, state="readonly", width=8)
         self.target_combo.grid(row=0, column=3, padx=2)
         self.target_combo.bind("<<ComboboxSelected>>", lambda e: self.on_endpoint_changed())
@@ -2576,11 +2607,13 @@ class App:
         start = time.perf_counter()
         if not hasattr(self, "state") or not self.state:
             self.state = {"fault": "No fault"}
-        self.state["source"] = self.source_choice.get()
-        self.state["target"] = self.target_choice.get()
+        src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
+        dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        self.state["source"] = src
+        self.state["target"] = dst
 
         # Stage 1: Network Monitoring Module (telemetry observations only)
-        self.obs = collect_observations(self.g, self.state)
+        self.obs = collect_observations(self.g, self.state, source=src, target=dst)
         # Stage 2: Independent Root-Cause Diagnosis Module
         self.findings = diagnose(self.obs)
         self.diag_time = time.perf_counter() - start
@@ -2613,11 +2646,13 @@ class App:
         if not hasattr(self, "findings"):
             self.diagnose()
         start = time.perf_counter()
-        self.state["source"] = self.source_choice.get()
-        self.state["target"] = self.target_choice.get()
+        src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
+        dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        self.state["source"] = src
+        self.state["target"] = dst
 
         # Stage 3: Fault-Specific Automated Recovery & Stage 4: Post-Recovery Verification
-        result = recover(self.g, self.state, findings=self.findings)
+        result = recover(self.g, self.state, findings=self.findings, source=src, target=dst)
         self.rec_time = time.perf_counter() - start
         metrics = make_metrics(self.g, result["route"], self.diag_time, self.rec_time)
 
@@ -2675,6 +2710,9 @@ class App:
             self.update_header_status("CRITICAL", "RECOVERY NOT VERIFIED")
 
         self.log_event(f"Recovery executed: {result['status']} | Active route: {metrics['Selected route']}")
+        pkt_res = result.get("packet_transmission", {})
+        if pkt_res:
+            self.log_event(f"Probe packet transmission ({pkt_res.get('source')} -> {pkt_res.get('target')}): {pkt_res.get('packets_delivered')}/{pkt_res.get('packets_sent')} delivered | Loss: {pkt_res.get('packets_dropped')} | Route: {pkt_res.get('route_used')}")
         self.history.append(("recovery", result["status"]))
 
     def reset(self):
@@ -2795,9 +2833,13 @@ class App:
         self.explanation_label.config(text=f"[Active Forwarding Route: {active_str}] Policy Decision: {selection['explanation']}")
 
     def on_endpoint_changed(self):
+        src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
+        dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        self.state["source"] = src
+        self.state["target"] = dst
         self.update_route_comparison()
         self.draw()
-        self.log_event(f"Changed path endpoints: {self.source_choice.get()} -> {self.target_choice.get()}")
+        self.log_event(f"Changed path endpoints: {src} -> {dst}")
 
     # -------------------------------------------------------------------------
     # UI Helper Methods
@@ -2821,15 +2863,23 @@ class App:
 
     def refresh_endpoint_selectors(self):
         nodes = list(self.g.nodes())
-        self.source_combo["values"] = nodes
-        self.target_combo["values"] = nodes
-        if self.source_choice.get() not in nodes:
+        if hasattr(self, "source_combo"):
+            self.source_combo["values"] = nodes
+        if hasattr(self, "target_combo"):
+            self.target_combo["values"] = nodes
+        if hasattr(self, "top_source_combo"):
+            self.top_source_combo["values"] = nodes
+        if hasattr(self, "top_target_combo"):
+            self.top_target_combo["values"] = nodes
+        if hasattr(self, "source_choice") and self.source_choice.get() not in nodes:
             self.source_choice.set("PC1" if "PC1" in nodes else (nodes[0] if nodes else ""))
-        if self.target_choice.get() not in nodes:
+        if hasattr(self, "target_choice") and self.target_choice.get() not in nodes:
             self.target_choice.set("Server" if "Server" in nodes else (nodes[-1] if nodes else ""))
-        self.dev_select_combo["values"] = nodes
+        if hasattr(self, "dev_select_combo"):
+            self.dev_select_combo["values"] = nodes
         edge_labels = [f"{a} <-> {b}" for a, b in self.g.edges()]
-        self.link_select_combo["values"] = edge_labels
+        if hasattr(self, "link_select_combo"):
+            self.link_select_combo["values"] = edge_labels
         self.refresh_target_link_options()
 
     def get_node_position(self, node):

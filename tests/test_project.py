@@ -4472,5 +4472,148 @@ class SurgicalBugFixPassTests(unittest.TestCase):
         self.assertEqual(g["R1"]["R2"]["status"], "DOWN")
 
 
+class DynamicEndpointsAndPacketTransmissionTests(unittest.TestCase):
+    """Verifies dynamic source/target endpoint parameterization and probe packet transmission."""
+
+    def test_dynamic_endpoints_monitoring_and_diagnosis(self):
+        """1. Monitoring and diagnosis accurately evaluate arbitrary source and destination endpoints."""
+        g = build_network()
+        # Add a secondary host PC2 connected to Server
+        g.add_node("PC2", type="PC", ip="192.168.2.50", gateway="Server")
+        g.add_edge("Server", "PC2", status="UP", latency_ms=1.5, packet_loss=0.0)
+
+        # Monitor PC1 -> PC2
+        obs = collect_observations(g, source="PC1", target="PC2")
+        self.assertEqual(obs["source"], "PC1")
+        self.assertEqual(obs["target"], "PC2")
+        self.assertTrue(obs["reachability"])
+        self.assertIn("PC2", obs["path"])
+
+        # Inject failure on link R1-R2
+        g["R1"]["R2"]["status"] = "DOWN"
+        obs2 = collect_observations(g, source="PC1", target="PC2")
+        findings2 = diagnose(obs2)
+        self.assertTrue(any(f.root_cause == "Link failure" for f in findings2))
+
+    def test_dynamic_endpoints_recovery_and_7point_verification(self):
+        """2. Recovery evaluates candidate paths and 7 verification checks relative to active (src, dst)."""
+        g = build_network()
+        g.add_node("PC2", type="PC", ip="192.168.2.50", gateway="Server")
+        g.add_edge("Server", "PC2", status="UP", latency_ms=1.5, packet_loss=0.0)
+
+        # Sever primary path link R1-R2
+        g["R1"]["R2"]["status"] = "DOWN"
+        res = recover(g, source="PC1", target="PC2")
+
+        self.assertEqual(res["source"], "PC1")
+        self.assertEqual(res["target"], "PC2")
+        self.assertEqual(res["status"], "RECOVERY VERIFIED")
+        self.assertTrue(res["verified"])
+        self.assertEqual(res["route"][0], "PC1")
+        self.assertEqual(res["route"][-1], "PC2")
+        self.assertIn("R3", res["route"])
+
+        # 7-point verification checks
+        v = res["verification_checks"]
+        self.assertEqual(v["endpoint_ip_connectivity"], "PASS")
+        self.assertEqual(v["failed_links_isolated"], "PASS")
+        self.assertEqual(v["dns_resolution"], "PASS")
+
+        # Report D reflects endpoints
+        rep_d = format_verification_report(res)
+        self.assertIn("Target Endpoint Pair    : PC1 -> PC2", rep_d)
+        self.assertIn("Overall Recovery Status : RECOVERY VERIFIED", rep_d)
+
+    def test_probe_packet_transmission_on_healthy_and_failover(self):
+        """3. Probe packet transmission sends 5 test packets and records 100% delivery on healthy failover route."""
+        g = build_network()
+        g["R1"]["R2"]["status"] = "DOWN"
+
+        res = recover(g, source="PC1", target="Server")
+        pkt = res.get("packet_transmission")
+        self.assertIsNotNone(pkt)
+        self.assertEqual(pkt["packets_sent"], 5)
+        self.assertEqual(pkt["packets_delivered"], 5)
+        self.assertEqual(pkt["packets_dropped"], 0)
+        self.assertEqual(pkt["delivery_rate_pct"], 100.0)
+        self.assertIn("PC1 -> R1 -> R3 -> Server", pkt["route_used"])
+        self.assertEqual(len(pkt["packet_details"]), 5)
+        for p in pkt["packet_details"]:
+            self.assertEqual(p["status"], "DELIVERED")
+            self.assertGreater(p["rtt_ms"], 0.0)
+
+        # Verify Report C includes transmission summary
+        rep_c = format_recovery_report(res)
+        self.assertIn("=== PROBE PACKET TRANSMISSION SUMMARY ===", rep_c)
+        self.assertIn("Packets Sent                : 5", rep_c)
+        self.assertIn("Packets Delivered           : 5", rep_c)
+        self.assertIn("Packets Dropped             : 0", rep_c)
+        self.assertIn("Delivery Rate               : 100.0%", rep_c)
+        self.assertIn("PC1 -> R1 -> R3 -> Server", rep_c)
+
+    def test_probe_packet_transmission_on_network_partition(self):
+        """4. Probe packet transmission records DROPPED_NO_ROUTE when destination endpoint is partitioned."""
+        g = build_network()
+        # Sever all paths to Server
+        g["R2"]["Server"]["status"] = "DOWN"
+        g["R3"]["Server"]["status"] = "DOWN"
+
+        res = recover(g, source="PC1", target="Server")
+        self.assertEqual(res["status"], "RECOVERY UNAVAILABLE")
+        self.assertFalse(res["verified"])
+
+        pkt = res.get("packet_transmission")
+        self.assertIsNotNone(pkt)
+        self.assertEqual(pkt["packets_sent"], 5)
+        self.assertEqual(pkt["packets_delivered"], 0)
+        self.assertEqual(pkt["packets_dropped"], 5)
+        self.assertEqual(pkt["delivery_rate_pct"], 0.0)
+        self.assertEqual(pkt["route_used"], "None (No Path)")
+        self.assertEqual(len(pkt["packet_details"]), 5)
+        for p in pkt["packet_details"]:
+            self.assertEqual(p["status"], "DROPPED_NO_ROUTE")
+            self.assertIn("Partitioned", p["reason"])
+
+        rep_c = format_recovery_report(res)
+        self.assertIn("=== PROBE PACKET TRANSMISSION SUMMARY ===", rep_c)
+        self.assertIn("Packets Dropped             : 5", rep_c)
+        self.assertIn("DROPPED_NO_ROUTE", rep_c)
+
+    def test_ui_simulation_bar_top_source_and_target_selectors(self):
+        """5. GUI simulation toolbar includes prominent Source and Target dropdowns and logs packet transmission."""
+        from unittest.mock import patch
+        from main import App
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            with patch("tkinter.messagebox.showinfo"), patch("tkinter.messagebox.showerror"), patch("tkinter.messagebox.showwarning"):
+                app = App(root)
+
+                # Verify top toolbar controls exist
+                self.assertTrue(hasattr(app, "top_source_combo"))
+                self.assertTrue(hasattr(app, "top_target_combo"))
+                self.assertEqual(app.source_choice.get(), "PC1")
+                self.assertEqual(app.target_choice.get(), "Server")
+
+                # Change source and target
+                app.source_choice.set("PC1")
+                app.target_choice.set("R3")
+                app.on_endpoint_changed()
+                self.assertEqual(app.state["source"], "PC1")
+                self.assertEqual(app.state["target"], "R3")
+
+                # Test recovery execution logs probe packet transmission
+                app.recover()
+                log_content = app.log.get("1.0", "end")
+                self.assertIn("Probe packet transmission", log_content)
+                self.assertIn("5/5 delivered", log_content)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+
 if __name__ == "__main__":
     unittest.main()

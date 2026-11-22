@@ -1,5 +1,6 @@
 """Performance measurements for the simulated network."""
 from network_model import path_cost
+from recovery import transmit_test_packets
 
 def make_metrics(g, path, diagnosis_time=0.0, recovery_time=0.0):
     valid = bool(path)
