@@ -48,9 +48,32 @@ from fault_injection import (
     BACKEND_TO_UI_MAP,
     parse_link_endpoints
 )
-from monitoring import collect_observations
-from diagnostics import diagnose, DiagnosticFinding
-from recovery import recover
+from fault_registry import get_fault_registry, FaultStatus
+from scenario_manager import (
+    PREDEFINED_SCENARIOS,
+    inject_fault_batch,
+    validate_fault_batch
+)
+from recovery_planner import (
+    generate_recovery_plan,
+    format_plan_report,
+    RecoveryDecision,
+    RoutePolicy
+)
+from audit_logger import get_audit_logger, record_audit
+from network_terminal import NetworkTerminal
+from decision_engine import get_decision_engine, OperatingPolicy, DecisionOutcome, DecisionStatus
+from analytics_engine import get_analytics_engine
+from monitoring import collect_observations, format_monitoring_report, generate_monitoring_report
+from diagnostics import diagnose, DiagnosticFinding, format_diagnosis_report, generate_diagnosis_report
+from recovery import (
+    recover,
+    format_recovery_report,
+    generate_recovery_report,
+    format_verification_report,
+    generate_verification_report
+)
+from network_model import get_active_route, set_active_route
 from metrics import make_metrics
 
 
@@ -100,6 +123,13 @@ class App:
         self.drag_ylim = None
         self.pan_start = None
 
+        # Dashboard, Terminal & Multi-Fault State
+        self.custom_fault_batch = []
+        self.terminal = None
+        self.last_recovery_status = "NOMINAL"
+        self.last_recovery_service_availability = "AVAILABLE"
+        self.last_recovery_network_health = "HEALTHY"
+
         # Apply Cisco Packet Tracer Styling
         self._apply_theme()
 
@@ -124,6 +154,9 @@ class App:
         self.update_inventory()
         self.fit_to_screen()
         self.update_header_status("HEALTHY", "LOGICAL WORKSPACE READY")
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
+        self.refresh_audit_view()
         self.log_event("Packet Tracer logical workspace initialized. Baseline 5-device topology loaded.")
 
     # -------------------------------------------------------------------------
@@ -236,6 +269,8 @@ class App:
         tools_menu.add_command(label="Move / Pan Tool", command=lambda: self.set_tool("move"), accelerator="M")
         tools_menu.add_command(label="Connect Devices (Cable)", command=lambda: self.set_tool("connect"), accelerator="C")
         tools_menu.add_command(label="Delete Tool", command=lambda: self.set_tool("delete"), accelerator="D")
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Open Simulated Network Terminal (CMD)...", command=self.open_network_terminal, accelerator="Ctrl+T")
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         # Simulation Menu
@@ -271,6 +306,8 @@ class App:
         self.root.bind("<F5>", lambda e: self.diagnose())
         self.root.bind("<F6>", lambda e: self.recover())
         self.root.bind("<F4>", lambda e: self.reset())
+        self.root.bind("<Control-t>", lambda e: self.open_network_terminal())
+        self.root.bind("<Control-T>", lambda e: self.open_network_terminal())
         self.root.bind("<Escape>", lambda e: self.cancel_active_tool())
 
         # Protected Delete Key Handler
@@ -424,6 +461,9 @@ class App:
                   relief="flat", padx=10, pady=2, cursor="hand2", command=self.recover).pack(side="left", padx=3)
         tk.Button(sim_left, text="🔄 Reset", font=("Segoe UI", 8, "bold"), bg="#475569", fg="#ffffff",
                   relief="flat", padx=10, pady=2, cursor="hand2", command=self.reset).pack(side="left", padx=3)
+        tk.Button(sim_left, text="💻 Terminal", font=("Segoe UI", 8, "bold"), bg="#0f172a", fg="#38bdf8",
+                  highlightbackground="#0284c7", highlightcolor="#0284c7", highlightthickness=1,
+                  relief="flat", padx=10, pady=2, cursor="hand2", command=self.open_network_terminal).pack(side="left", padx=3)
 
         # Simulation Right Section: Engine indicator
         sim_right = tk.Frame(bar_sim, bg="#0f172a")
@@ -1060,9 +1100,10 @@ class App:
         self.draw()
 
     # -------------------------------------------------------------------------
-    # Component: Centre (Interactive Logical Workspace)
+    # Component: Centre (Interactive Logical Workspace & KPI Dashboard)
     # -------------------------------------------------------------------------
     def _build_center_workspace(self, parent):
+        self._build_kpi_dashboard(parent)
         top_box = ttk.LabelFrame(parent, text="Logical Workspace (Cisco Packet Tracer Environment)", padding=2)
         top_box.pack(fill="both", expand=True, padx=2, pady=2)
 
@@ -1070,6 +1111,38 @@ class App:
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=top_box)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    def _build_kpi_dashboard(self, parent):
+        """Build real-time 8-card Network Management KPI dashboard bar."""
+        self.kpi_bar = tk.Frame(parent, bg="#0f172a", height=52)
+        self.kpi_bar.pack(fill="x", padx=2, pady=(1, 3))
+
+        self.kpi_labels = {}
+        cards_def = [
+            ("dev", "DEVICES", "5", "Nodes"),
+            ("links", "LINKS", "5", "Connections"),
+            ("faults", "FAULTS", "0", "Active"),
+            ("crit", "CRITICAL", "0", "Outages"),
+            ("avail", "AVAILABILITY", "AVAILABLE", "Transport"),
+            ("health", "HEALTH", "HEALTHY", "Telemetry"),
+            ("route", "ACTIVE ROUTE", "PC1 -> R1 -> R2 -> Server", "Forwarding"),
+            ("status", "RECOVERY", "NOMINAL", "Last Status")
+        ]
+
+        for cid, title, default_val, sub in cards_def:
+            card = tk.Frame(self.kpi_bar, bg="#1e293b", bd=1, relief="solid")
+            card.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+
+            t_lbl = tk.Label(card, text=title, bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 7, "bold"))
+            t_lbl.pack(anchor="w", padx=4, pady=(2, 0))
+
+            v_lbl = tk.Label(card, text=default_val, bg="#1e293b", fg="#ffffff", font=("Segoe UI", 9, "bold"), anchor="w")
+            v_lbl.pack(anchor="w", padx=4, pady=0)
+
+            s_lbl = tk.Label(card, text=sub, bg="#1e293b", fg="#64748b", font=("Segoe UI", 7), anchor="w")
+            s_lbl.pack(anchor="w", padx=4, pady=(0, 2))
+
+            self.kpi_labels[cid] = (v_lbl, s_lbl)
 
     # -------------------------------------------------------------------------
     # Component: Right Sidebar (Inspector: Device, Link, Network Overview)
@@ -1193,6 +1266,12 @@ class App:
             self.link_tree.column(col, width=w, anchor="center")
         self.link_tree.pack(fill="both", expand=True, pady=1)
 
+        # Tab 4: Multi-Fault Scenario Builder
+        self._build_multi_fault_tab()
+
+        # Tab 5: Active Fault Registry
+        self._build_active_faults_tab()
+
     # -------------------------------------------------------------------------
     # Layout 4: Bottom Panel (Dockable Simulation Output & Event Log)
     # -------------------------------------------------------------------------
@@ -1270,6 +1349,546 @@ class App:
         self.log.configure(yscrollcommand=log_scroll.set)
         log_scroll.pack(side="right", fill="y")
         self.log.pack(side="left", fill="both", expand=True)
+
+        # Tab 6: Global Recovery Planner
+        self._build_recovery_planner_tab()
+
+        # Tab 7: Audit History & Analytics
+        self._build_audit_tab()
+
+        # Tab 8: Network Analytics & Six Graphs
+        self._build_network_analytics_tab()
+
+    def _build_multi_fault_tab(self):
+        tab_mf = ttk.Frame(self.insp_tabs, padding=4)
+        self.insp_tabs.add(tab_mf, text="Multi-Fault")
+
+        # Section 1: Predefined Scenarios
+        p_box = ttk.LabelFrame(tab_mf, text="Predefined Multi-Fault Scenarios", padding=4)
+        p_box.pack(fill="x", pady=2)
+
+        self.predef_var = tk.StringVar(value=list(PREDEFINED_SCENARIOS.keys())[0])
+        predef_combo = ttk.Combobox(
+            p_box, textvariable=self.predef_var,
+            values=list(PREDEFINED_SCENARIOS.keys()),
+            state="readonly", width=22
+        )
+        predef_combo.pack(fill="x", pady=2)
+        predef_combo.bind("<<ComboboxSelected>>", self._on_predef_scenario_selected)
+
+        first_items = PREDEFINED_SCENARIOS[self.predef_var.get()]
+        first_desc = f"{len(first_items)} faults: " + ", ".join(f.get("fault_type", "fault") for f in first_items)
+        self.predef_desc_lbl = tk.Label(
+            p_box, text=first_desc,
+            bg=self.c_panel_bg, fg="#475569", font=("Segoe UI", 7),
+            wraplength=200, justify="left", anchor="w"
+        )
+        self.predef_desc_lbl.pack(fill="x", pady=2)
+
+        ttk.Button(
+            p_box, text="⚡ Inject Predefined Batch", style="Danger.TButton",
+            command=self.inject_predefined_scenario
+        ).pack(fill="x", pady=2)
+
+        # Section 2: Custom Multi-Fault Batch Builder
+        b_box = ttk.LabelFrame(tab_mf, text="Custom Scenario Builder", padding=4)
+        b_box.pack(fill="both", expand=True, pady=2)
+
+        f_type_frame = ttk.Frame(b_box)
+        f_type_frame.pack(fill="x", pady=1)
+        ttk.Label(f_type_frame, text="Type:").pack(side="left")
+        self.custom_type_var = tk.StringVar(value="Link failure")
+        type_combo = ttk.Combobox(
+            f_type_frame, textvariable=self.custom_type_var,
+            values=["Link failure", "Incorrect default gateway", "DNS service failure", "High latency", "Packet loss"],
+            state="readonly", width=16
+        )
+        type_combo.pack(side="right", fill="x", expand=True, padx=(4, 0))
+        type_combo.bind("<<ComboboxSelected>>", self._on_custom_type_selected)
+
+        f_target_frame = ttk.Frame(b_box)
+        f_target_frame.pack(fill="x", pady=1)
+        ttk.Label(f_target_frame, text="Target:").pack(side="left")
+        self.custom_target_var = tk.StringVar()
+        self.custom_target_combo = ttk.Combobox(
+            f_target_frame, textvariable=self.custom_target_var,
+            state="readonly", width=16
+        )
+        self.custom_target_combo.pack(side="right", fill="x", expand=True, padx=(4, 0))
+
+        f_param_frame = ttk.Frame(b_box)
+        f_param_frame.pack(fill="x", pady=1)
+        ttk.Label(f_param_frame, text="Param:").pack(side="left")
+        self.custom_param_var = tk.StringVar()
+        ttk.Entry(f_param_frame, textvariable=self.custom_param_var, width=16).pack(side="right", fill="x", expand=True, padx=(4, 0))
+
+        btn_row = ttk.Frame(b_box)
+        btn_row.pack(fill="x", pady=2)
+        ttk.Button(btn_row, text="➕ Add", command=self.add_custom_fault_to_batch).pack(side="left", fill="x", expand=True, padx=1)
+        ttk.Button(btn_row, text="➖ Remove", command=self.remove_custom_batch_item).pack(side="right", fill="x", expand=True, padx=1)
+
+        self.custom_batch_listbox = tk.Listbox(b_box, height=3, font=("Segoe UI", 7), bg="#ffffff")
+        self.custom_batch_listbox.pack(fill="both", expand=True, pady=2)
+
+        ttk.Button(b_box, text="⚡ Inject Custom Batch", style="Danger.TButton", command=self.inject_custom_batch).pack(fill="x", pady=1)
+        ttk.Button(b_box, text="🔄 Clear All Faults", style="Primary.TButton", command=self.clear_all_registered_faults).pack(fill="x", pady=1)
+
+        self._refresh_custom_target_options()
+
+    def _build_active_faults_tab(self):
+        tab_af = ttk.Frame(self.insp_tabs, padding=4)
+        self.insp_tabs.add(tab_af, text="Active Faults")
+
+        self.active_faults_tree = ttk.Treeview(
+            tab_af, columns=("ID", "Type", "Target", "Status", "Severity"), show="headings", height=8
+        )
+        for col, w in [("ID", 65), ("Type", 85), ("Target", 65), ("Status", 55), ("Severity", 55)]:
+            self.active_faults_tree.heading(col, text=col)
+            self.active_faults_tree.column(col, width=w, anchor="center")
+        self.active_faults_tree.pack(fill="both", expand=True, pady=2)
+
+        btn_f = ttk.Frame(tab_af)
+        btn_f.pack(fill="x", pady=4)
+        ttk.Button(btn_f, text="Resolve Selected", style="Primary.TButton", command=self.resolve_selected_fault).pack(fill="x", pady=1)
+        ttk.Button(btn_f, text="Clear All Registered", style="Danger.TButton", command=self.clear_all_registered_faults).pack(fill="x", pady=1)
+        ttk.Button(btn_f, text="Refresh View", command=self.refresh_active_faults_view).pack(fill="x", pady=1)
+
+    def _build_recovery_planner_tab(self):
+        tab_plan = ttk.Frame(self.bottom_tabs, padding=4)
+        self.bottom_tabs.add(tab_plan, text="📐 Recovery Planner")
+
+        top_f = ttk.Frame(tab_plan)
+        top_f.pack(fill="x", pady=(0, 2))
+        self.plan_decision_lbl = tk.Label(
+            top_f, text="Pre-Execution Recovery Plan: No plan generated yet.",
+            bg="#e2e8f0", fg=self.c_cisco_dark, font=("Segoe UI", 8, "bold"), anchor="w", padx=6, pady=2
+        )
+        self.plan_decision_lbl.pack(side="left", fill="x", expand=True)
+
+        ttk.Button(top_f, text="⚡ Execute Coordinated Recovery", style="Success.TButton", command=self.recover).pack(side="right", padx=4)
+
+        split = ttk.PanedWindow(tab_plan, orient="horizontal")
+        split.pack(fill="both", expand=True)
+
+        left_f = ttk.Frame(split)
+        right_f = ttk.Frame(split)
+        split.add(left_f, weight=3)
+        split.add(right_f, weight=2)
+
+        ttk.Label(left_f, text="Multi-Objective Candidate Route Ranking:", font=("Segoe UI", 8, "bold")).pack(anchor="w")
+        cols_r = ("Rank", "Path", "Cost", "Latency", "Loss", "Score", "Status")
+        self.plan_routes_tree = ttk.Treeview(left_f, columns=cols_r, show="headings", height=4)
+        for col, w in [("Rank", 40), ("Path", 170), ("Cost", 40), ("Latency", 55), ("Loss", 50), ("Score", 50), ("Status", 65)]:
+            self.plan_routes_tree.heading(col, text=col)
+            self.plan_routes_tree.column(col, width=w, anchor="center")
+        self.plan_routes_tree.column("Path", anchor="w")
+        self.plan_routes_tree.pack(fill="both", expand=True)
+
+        ttk.Label(right_f, text="Planned Corrective Action Sequence:", font=("Segoe UI", 8, "bold")).pack(anchor="w")
+        cols_a = ("ID", "Priority", "Action Type", "Target", "Expected Result")
+        self.plan_actions_tree = ttk.Treeview(right_f, columns=cols_a, show="headings", height=4)
+        for col, w in [("ID", 60), ("Priority", 50), ("Action Type", 100), ("Target", 65), ("Expected Result", 160)]:
+            self.plan_actions_tree.heading(col, text=col)
+            self.plan_actions_tree.column(col, width=w, anchor="center")
+        self.plan_actions_tree.pack(fill="both", expand=True)
+
+    def _build_audit_tab(self):
+        tab_audit = ttk.Frame(self.bottom_tabs, padding=4)
+        self.bottom_tabs.add(tab_audit, text="📜 Audit & Analytics")
+
+        self.audit_summary_frame = tk.Frame(tab_audit, bg="#1e293b", bd=1, relief="solid")
+        self.audit_summary_frame.pack(fill="x", pady=(0, 3))
+        self.audit_summary_lbl = tk.Label(
+            self.audit_summary_frame,
+            text="Analytics: Total Runs: 0 | Verified: 0 (0.0%) | Service Maintained: 0 | Actions Executed: 0 | Rollbacks: 0 | Fallbacks: 0",
+            bg="#1e293b", fg="#e2e8f0", font=("Segoe UI", 8, "bold"), padx=6, pady=3, anchor="w"
+        )
+        self.audit_summary_lbl.pack(fill="x")
+
+        cols_aud = ("Audit ID", "Execution ID", "Timestamp", "Scenario", "Status", "Availability", "Health", "Verified", "Actions", "Lat Δ", "Loss Δ")
+        self.audit_tree = ttk.Treeview(tab_audit, columns=cols_aud, show="headings", height=4)
+        for col, w in [
+            ("Audit ID", 65), ("Execution ID", 75), ("Timestamp", 120), ("Scenario", 110),
+            ("Status", 110), ("Availability", 75), ("Health", 65), ("Verified", 55),
+            ("Actions", 50), ("Lat Δ", 50), ("Loss Δ", 50)
+        ]:
+            self.audit_tree.heading(col, text=col)
+            self.audit_tree.column(col, width=w, anchor="center")
+        self.audit_tree.pack(fill="both", expand=True)
+
+        b_bar = ttk.Frame(tab_audit)
+        b_bar.pack(fill="x", pady=(2, 0))
+        ttk.Button(b_bar, text="📥 Export Audit Log (CSV)...", command=self.export_audit_csv).pack(side="left", padx=2)
+        ttk.Button(b_bar, text="💾 Export Audit Log (JSON)...", command=self.export_audit_json).pack(side="left", padx=2)
+        ttk.Button(b_bar, text="🗑 Clear Audit History", command=self.clear_audit_history).pack(side="left", padx=2)
+        ttk.Button(b_bar, text="Refresh Audit View", command=self.refresh_audit_view).pack(side="right", padx=2)
+
+    def _build_network_analytics_tab(self):
+        """Build the dedicated Network Analytics tab with 6 Matplotlib visualization graphs."""
+        tab_na = ttk.Frame(self.bottom_tabs, padding=4)
+        self.bottom_tabs.add(tab_na, text="📊 Network Analytics & Trends")
+
+        # Analytics Toolbar
+        t_bar = ttk.Frame(tab_na)
+        t_bar.pack(fill="x", pady=(0, 2))
+
+        self.analytics_status_lbl = tk.Label(
+            t_bar, text="Analytics: Ready | MTTR: 0.0ms | Telemetry Datapoints: 0",
+            bg="#0f172a", fg="#38bdf8", font=("Segoe UI", 8, "bold"), padx=6, pady=2, anchor="w"
+        )
+        self.analytics_status_lbl.pack(side="left", fill="x", expand=True)
+
+        ttk.Button(t_bar, text="🔄 Refresh Graphs", command=self.refresh_analytics_graphs).pack(side="left", padx=2)
+        ttk.Button(t_bar, text="📥 Export CSV...", command=self.export_analytics_csv).pack(side="left", padx=2)
+        ttk.Button(t_bar, text="🖼 Export PNG...", command=self.export_analytics_png).pack(side="left", padx=2)
+        ttk.Button(t_bar, text="🧹 Reset History", command=self.clear_analytics_history).pack(side="right", padx=2)
+
+        # Embedded Matplotlib Canvas
+        self.analytics_fig = Figure(figsize=(11, 5.8), dpi=95)
+        self.analytics_canvas = FigureCanvasTkAgg(self.analytics_fig, master=tab_na)
+        self.analytics_canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.refresh_analytics_graphs()
+
+    def refresh_analytics_graphs(self):
+        """Render all 6 analytical graphs using live telemetry and audit history."""
+        if not hasattr(self, "analytics_fig") or not hasattr(self, "analytics_canvas"):
+            return
+        eng = get_analytics_engine()
+        if not eng.history and hasattr(self, "g"):
+            obs = getattr(self, "obs", None) or collect_observations(self.g)
+            eng.record_telemetry(self.g, event_label="Baseline", phase="BASELINE", observations=obs)
+        eng.render_six_graphs(self.analytics_fig, g=getattr(self, "g", None))
+        self.analytics_canvas.draw_idle()
+
+        mttr_info = eng.calculate_mttr()
+        self.analytics_status_lbl.config(
+            text=f"Analytics: Active | MTTR: {mttr_info['mttr_seconds']*1000.0:.1f}ms | Recovery Runs: {mttr_info['total_recovery_runs']} | Success Rate: {mttr_info['success_rate_pct']}% | Datapoints: {len(eng.history)}"
+        )
+
+    def export_analytics_csv(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export Network Analytics to CSV"
+        )
+        if filepath:
+            get_analytics_engine().export_csv(filepath)
+            messagebox.showinfo("Export Successful", f"Analytics data exported to:\n{filepath}")
+
+    def export_analytics_png(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG images", "*.png"), ("All files", "*.*")],
+            title="Export 6 Analytics Graphs to PNG"
+        )
+        if filepath:
+            get_analytics_engine().export_png(filepath)
+            messagebox.showinfo("Export Successful", f"Analytics graphs exported to:\n{filepath}")
+
+    def clear_analytics_history(self):
+        if messagebox.askyesno("Confirm Reset", "Clear all recorded analytics telemetry history?"):
+            get_analytics_engine().clear()
+            self.refresh_analytics_graphs()
+
+    def _on_predef_scenario_selected(self, event=None):
+        name = self.predef_var.get()
+        sc_items = PREDEFINED_SCENARIOS.get(name, [])
+        desc = f"{len(sc_items)} faults: " + ", ".join(f.get("fault_type", "Fault") for f in sc_items)
+        self.predef_desc_lbl.config(text=desc)
+
+    def _on_custom_type_selected(self, event=None):
+        self._refresh_custom_target_options()
+
+    def _refresh_custom_target_options(self):
+        ft = self.custom_type_var.get()
+        if ft in ("Link failure", "High latency", "Packet loss"):
+            labels = self.get_topology_link_labels()
+            self.custom_target_combo["values"] = labels
+            if labels and self.custom_target_var.get() not in labels:
+                self.custom_target_var.set(labels[0])
+        elif ft == "Incorrect default gateway":
+            pcs = [n for n, d in self.g.nodes(data=True) if d.get("type") in ("PC", "Laptop")]
+            self.custom_target_combo["values"] = pcs
+            if pcs and self.custom_target_var.get() not in pcs:
+                self.custom_target_var.set(pcs[0])
+        elif ft == "DNS service failure":
+            self.custom_target_combo["values"] = ["DNS Service"]
+            self.custom_target_var.set("DNS Service")
+
+    def add_custom_fault_to_batch(self):
+        ft = self.custom_type_var.get()
+        tgt = self.custom_target_var.get()
+        param = self.custom_param_var.get()
+
+        spec = {"fault_type": ft}
+        if ft in ("Link failure", "High latency", "Packet loss"):
+            u, v = parse_link_endpoints(tgt)
+            if not (u and v):
+                messagebox.showerror("Invalid Target", f"Invalid target link: '{tgt}'.")
+                return
+            spec["target"] = (u, v)
+            if ft == "High latency":
+                try:
+                    spec["parameters"] = {"latency_ms": float(param) if param else 250.0}
+                except ValueError:
+                    spec["parameters"] = {"latency_ms": 250.0}
+            elif ft == "Packet loss":
+                try:
+                    spec["parameters"] = {"packet_loss": float(param) if param else 30.0}
+                except ValueError:
+                    spec["parameters"] = {"packet_loss": 30.0}
+        elif ft == "Incorrect default gateway":
+            spec["target"] = tgt or "PC1"
+            spec["parameters"] = {"gateway": param if param else "192.168.1.99"}
+        elif ft == "DNS service failure":
+            spec["target"] = "DNS Service"
+            spec["parameters"] = {"dns_available": False}
+
+        self.custom_fault_batch.append(spec)
+        disp_str = f"[{ft}] Target: {spec['target']} Params: {spec.get('parameters', {})}"
+        self.custom_batch_listbox.insert(tk.END, disp_str)
+        self.log_event(f"Added fault to custom batch: {disp_str}")
+
+    def remove_custom_batch_item(self):
+        sel = self.custom_batch_listbox.curselection()
+        if sel:
+            idx = sel[0]
+            self.custom_batch_listbox.delete(idx)
+            del self.custom_fault_batch[idx]
+
+    def inject_predefined_scenario(self):
+        name = self.predef_var.get()
+        batch = PREDEFINED_SCENARIOS.get(name)
+        if not batch:
+            return
+        res = inject_fault_batch(self.g, batch, scenario_name=name)
+        if not res.get("success"):
+            messagebox.showerror("Batch Injection Error", f"Batch injection failed: {res.get('details')}")
+            return
+        records = res.get("applied_faults", [])
+
+        self.draw()
+        self.update_route_comparison()
+        self.update_inventory()
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
+        self.obs = collect_observations(self.g)
+        self.findings = diagnose(self.obs)
+        self.log_event(f"Injected predefined multi-fault scenario: '{name}' ({len(records)} faults registered).")
+        messagebox.showinfo("Multi-Fault Injection", f"Successfully injected predefined scenario:\n'{name}'\n({len(records)} faults active).")
+
+    def inject_custom_batch(self):
+        if not self.custom_fault_batch:
+            messagebox.showwarning("Empty Batch", "No faults added to custom batch.")
+            return
+
+        res = inject_fault_batch(self.g, self.custom_fault_batch, scenario_name="Custom Batch")
+        if not res.get("success"):
+            messagebox.showerror("Batch Injection Error", f"Batch injection failed: {res.get('details')}")
+            return
+        records = res.get("applied_faults", [])
+
+        self.draw()
+        self.update_route_comparison()
+        self.update_inventory()
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
+        self.obs = collect_observations(self.g)
+        self.findings = diagnose(self.obs)
+        self.log_event(f"Injected custom multi-fault batch ({len(records)} faults registered).")
+        messagebox.showinfo("Custom Batch Injection", f"Successfully injected {len(records)} faults into network.")
+
+    def clear_all_registered_faults(self):
+        reg = get_fault_registry(self.g)
+        reg.clear_all(self.g)
+        self.custom_fault_batch.clear()
+        self.custom_batch_listbox.delete(0, tk.END)
+        self.last_recovery_status = "NOMINAL"
+        self.last_recovery_service_availability = "AVAILABLE"
+        self.last_recovery_network_health = "HEALTHY"
+        self.draw()
+        self.update_route_comparison()
+        self.update_inventory()
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
+        self.obs = collect_observations(self.g)
+        self.findings = diagnose(self.obs)
+        self.log_event("Cleared all registered faults; restored healthy baseline.")
+        messagebox.showinfo("Faults Cleared", "All active faults cleared from registry and topology.")
+
+    def resolve_selected_fault(self):
+        sel = self.active_faults_tree.selection()
+        if not sel:
+            messagebox.showwarning("No Selection", "Please select a fault from the table to resolve.")
+            return
+        item = self.active_faults_tree.item(sel[0])
+        fid = item["values"][0]
+        reg = get_fault_registry(self.g)
+        rec = reg.get_fault(fid)
+        if rec:
+            from fault_injection import clear_fault_instance
+            clear_fault_instance(self.g, rec)
+            self.draw()
+            self.update_route_comparison()
+            self.update_inventory()
+            self.update_kpi_dashboard()
+            self.refresh_active_faults_view()
+            self.log_event(f"Resolved fault instance {fid} ({rec.fault_type}).")
+
+    def refresh_active_faults_view(self):
+        if not hasattr(self, "active_faults_tree"):
+            return
+        for item in self.active_faults_tree.get_children():
+            self.active_faults_tree.delete(item)
+
+        reg = get_fault_registry(self.g)
+        for f in reg.get_active_faults():
+            tgt = getattr(f, "affected_component", getattr(f, "target", "N/A"))
+            tgt_str = f"{tgt[0]}-{tgt[1]}" if isinstance(tgt, (list, tuple)) else str(tgt)
+            ft = getattr(f, "fault_type", "Fault")
+            st = f.status.value if hasattr(f.status, "value") else str(f.status)
+            sev = getattr(f, "severity", "HIGH")
+            self.active_faults_tree.insert("", tk.END, values=(
+                f.fault_id, ft, tgt_str, st, sev
+            ))
+
+    def update_recovery_planner_view(self, plan=None):
+        if not hasattr(self, "plan_routes_tree"):
+            return
+
+        if plan is None:
+            src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
+            dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+            findings = getattr(self, "findings", [])
+            plan = generate_recovery_plan(self.g, findings, source=src, target=dst)
+
+        self.plan_decision_lbl.config(
+            text=f"Plan [{plan.plan_id}] Decision: {plan.decision} | Policy: {plan.policy_used} | Expected: {plan.expected_outcome}"
+        )
+
+        for item in self.plan_routes_tree.get_children():
+            self.plan_routes_tree.delete(item)
+
+        for rank, r in enumerate(plan.candidate_routes, 1):
+            p_str = " -> ".join(r["path"])
+            is_sel = "SELECTED" if plan.selected_route and r["path"] == plan.selected_route["path"] else ("USABLE" if r.get("is_usable") else "DOWN")
+            score = r.get("score", "N/A")
+            self.plan_routes_tree.insert("", tk.END, values=(
+                rank, p_str, r.get("cost", 1), f"{r.get('latency_ms', 0):.1f}ms", f"{r.get('probabilistic_loss', r.get('max_loss', 0)):.1f}%", score, is_sel
+            ))
+
+        for item in self.plan_actions_tree.get_children():
+            self.plan_actions_tree.delete(item)
+
+        for act in plan.actions:
+            tgt_str = str(act.target_component)
+            self.plan_actions_tree.insert("", tk.END, values=(
+                act.action_id, act.priority, act.action_type, tgt_str, act.expected_result
+            ))
+
+    def refresh_audit_view(self):
+        if not hasattr(self, "audit_tree"):
+            return
+
+        for item in self.audit_tree.get_children():
+            self.audit_tree.delete(item)
+
+        logger = get_audit_logger()
+        analytics = logger.compute_analytics()
+
+        self.audit_summary_lbl.config(
+            text=f"Analytics: Total Runs: {analytics['total_runs']} | Verified: {analytics['verified_count']} ({analytics['success_rate_pct']}%) | Maintained: {analytics['service_maintained_count']} | Actions: {analytics['total_actions_executed']} | Rollbacks: {analytics['rollbacks_count']} | Fallbacks: {analytics['fallbacks_count']} | Avg Lat Δ: {analytics['avg_latency_delta_ms']}ms | Avg Loss Δ: {analytics['avg_loss_delta_pct']}%"
+        )
+
+        for r in logger.get_all_records():
+            self.audit_tree.insert("", tk.END, values=(
+                r.audit_id, r.execution_id, r.timestamp_iso, r.scenario_id,
+                r.recovery_status, r.service_availability, r.network_health,
+                "PASS" if r.verification_passed else "FAIL",
+                r.actions_count, f"{r.latency_delta_ms:+.1f}", f"{r.loss_delta_pct:+.1f}%"
+            ))
+
+    def export_audit_csv(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export Recovery Audit Log to CSV"
+        )
+        if filepath:
+            get_audit_logger().export_to_csv(filepath)
+            messagebox.showinfo("Export Successful", f"Audit log exported to:\n{filepath}")
+
+    def export_audit_json(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export Recovery Audit Log to JSON"
+        )
+        if filepath:
+            get_audit_logger().export_to_json(filepath)
+            messagebox.showinfo("Export Successful", f"Audit log exported to:\n{filepath}")
+
+    def clear_audit_history(self):
+        if messagebox.askyesno("Confirm Clear", "Clear all recovery audit history records?"):
+            get_audit_logger().clear()
+            self.refresh_audit_view()
+
+    def update_kpi_dashboard(self):
+        """Update KPI values and colors based on current network state and registry."""
+        if not hasattr(self, "kpi_labels") or not self.kpi_labels:
+            return
+
+        reg = get_fault_registry(self.g)
+        active_f_cnt = reg.get_active_fault_count()
+        crit_f_cnt = len([f for f in reg.get_active_faults() if getattr(f, "severity", "HIGH") == "CRITICAL"])
+
+        self.kpi_labels["dev"][0].config(text=str(self.g.number_of_nodes()))
+        self.kpi_labels["links"][0].config(text=str(self.g.number_of_edges()))
+
+        self.kpi_labels["faults"][0].config(
+            text=str(active_f_cnt),
+            fg="#ef4444" if active_f_cnt > 0 else "#4ade80"
+        )
+        self.kpi_labels["crit"][0].config(
+            text=str(crit_f_cnt),
+            fg="#ef4444" if crit_f_cnt > 0 else "#94a3b8"
+        )
+
+        avail_str = getattr(self, "last_recovery_service_availability", "AVAILABLE")
+        health_str = getattr(self, "last_recovery_network_health", "HEALTHY")
+        if active_f_cnt > 0 and not hasattr(self, "last_recovery_network_health"):
+            health_str = "DEGRADED"
+
+        self.kpi_labels["avail"][0].config(
+            text=avail_str,
+            fg="#4ade80" if avail_str == "AVAILABLE" else "#ef4444"
+        )
+        health_fg = "#4ade80" if health_str == "HEALTHY" else ("#f59e0b" if health_str == "DEGRADED" else "#ef4444")
+        self.kpi_labels["health"][0].config(text=health_str, fg=health_fg)
+
+        src = self.source_choice.get() if hasattr(self, "source_choice") else "PC1"
+        dst = self.target_choice.get() if hasattr(self, "target_choice") else "Server"
+        curr_p = get_active_route(self.g, src, dst)
+        route_str = " -> ".join(curr_p) if curr_p else "None"
+        if len(route_str) > 28:
+            route_str = route_str[:25] + "..."
+        self.kpi_labels["route"][0].config(text=route_str)
+
+        status_str = getattr(self, "last_recovery_status", "NOMINAL")
+        self.kpi_labels["status"][0].config(text=status_str)
+
+    def open_network_terminal(self):
+        from network_terminal import NetworkTerminal
+        curr_host = self.selected_node or "PC1"
+        self.terminal = NetworkTerminal(self.root, self.g, default_host=curr_host, on_state_change=self.on_terminal_state_change)
+        self.log_event("Simulated Network Terminal launched.")
+
+    def on_terminal_state_change(self):
+        self.draw()
+        self.update_kpi_dashboard()
+        self.update_route_comparison()
+        self.refresh_active_faults_view()
+        self.refresh_audit_view()
 
     # -------------------------------------------------------------------------
     # Visual Topology Rendering (Packet Tracer Logical Workspace)
@@ -1921,6 +2540,8 @@ class App:
             self.draw()
             self.update_route_comparison()
             self.update_inventory()
+            self.update_kpi_dashboard()
+            self.refresh_active_faults_view()
 
             is_no_fault = self.state.get("fault") == "No fault" or scenario_name in ("No fault", "No Fault \u2013 Healthy Baseline", "No Fault - Healthy Baseline")
             if is_no_fault:
@@ -1946,6 +2567,8 @@ class App:
             else:
                 self.log_event(f"Fault injected: {scenario_name}")
             self.history.append(("fault", scenario_name))
+            get_analytics_engine().record_telemetry(self.g, event_label=f"Fault: {scenario_name[:12]}", phase="FAULT")
+            self.refresh_analytics_graphs()
         except Exception as e:
             messagebox.showerror("Injection Error", str(e))
 
@@ -1956,48 +2579,18 @@ class App:
         self.state["source"] = self.source_choice.get()
         self.state["target"] = self.target_choice.get()
 
-        # Telemetry Collection (Pure Observation, no scenario labels)
+        # Stage 1: Network Monitoring Module (telemetry observations only)
         self.obs = collect_observations(self.g, self.state)
-        # Independent Root-Cause Diagnosis
+        # Stage 2: Independent Root-Cause Diagnosis Module
         self.findings = diagnose(self.obs)
         self.diag_time = time.perf_counter() - start
 
-        src = self.obs["source"]
-        dst = self.obs["target"]
-        routes = self.obs["routes"]
+        # Generate Separate Report A and Report B
+        rep_a = format_monitoring_report(self.obs)
+        rep_b = format_diagnosis_report(self.findings)
 
-        lines = [
-            "=== NETWORK MONITORING & TELEMETRY OBSERVATIONS ===",
-            f"Endpoint Route ({src} -> {dst}): {' -> '.join(self.obs['path']) if self.obs['path'] else 'None'}",
-            f"Reachability: {'REACHABLE (IP operational)' if self.obs['reachability'] else 'UNREACHABLE'}",
-            f"Discovered Paths: {len(routes)} simple loopless route(s)",
-            f"Down links: {', '.join(self.obs['down_links']) if self.obs['down_links'] else 'None (All UP)'}",
-            f"High latency: {self.obs['high_latency'] or 'None'}",
-            f"Packet loss: {self.obs['packet_loss'] or 'None'}",
-            f"Default gateway: {self.obs['gateway']} (valid={self.obs['gateway_ok']})",
-            f"DNS resolution: {'OPERATIONAL' if self.obs['dns_ok'] else 'FAILED'}",
-            f"End-to-end latency: {self.obs['end_to_end_latency_ms']} ms | Path loss: {self.obs['path_packet_loss']}%",
-            "\n=== INDEPENDENT ROOT-CAUSE DIAGNOSIS ==="
-        ]
-        for i, f in enumerate(self.findings, 1):
-            root_cause = getattr(f, "root_cause", f[0])
-            evidence = getattr(f, "evidence", f[1])
-            severity = getattr(f, "severity", "HIGH")
-            conf = getattr(f, "confidence", 0.95)
-            aff = getattr(f, "affected_components", [])
-            rec_act = getattr(f, "recommended_action", "")
-
-            lines.append(f"Finding {i}: {root_cause} [{severity} | Confidence: {conf:.0%}]")
-            if aff:
-                lines.append(f"  • Affected Components : {', '.join(str(a) for a in aff)}")
-            lines.append(f"  • Supporting Evidence : {evidence}")
-            if rec_act:
-                lines.append(f"  • Recommended Action  : {rec_act}")
-            lines.append("")
-
-        lines.append(f"Diagnosis execution time: {self.diag_time:.6f} s")
-
-        self.show_diag("\n".join(lines))
+        combined_report = f"{rep_a}\n\n{rep_b}\n\nDiagnosis execution time: {self.diag_time:.6f} s"
+        self.show_diag(combined_report)
         self.bottom_tabs.select(0)
 
         # Update health badge
@@ -2011,6 +2604,8 @@ class App:
             self.update_header_status("HEALTHY", "DIAGNOSIS: OPTIMAL HEALTH")
 
         self.update_route_comparison()
+        self.update_kpi_dashboard()
+        self.update_recovery_planner_view()
         self.log_event("Diagnosis completed: " + "; ".join(getattr(f, "root_cause", f[0]) for f in self.findings))
         self.history.append(("diagnosis", "; ".join(getattr(f, "root_cause", f[0]) for f in self.findings)))
 
@@ -2021,24 +2616,17 @@ class App:
         self.state["source"] = self.source_choice.get()
         self.state["target"] = self.target_choice.get()
 
+        # Stage 3: Fault-Specific Automated Recovery & Stage 4: Post-Recovery Verification
         result = recover(self.g, self.state, findings=self.findings)
         self.rec_time = time.perf_counter() - start
         metrics = make_metrics(self.g, result["route"], self.diag_time, self.rec_time)
 
-        lines = [
-            "=== AUTOMATED RECOVERY ACTIONS ==="
-        ] + [f"• {a}" for a in result["actions"]]
+        # Generate Separate Report C and Report D
+        rep_c = format_recovery_report(result)
+        rep_d = format_verification_report(result)
 
-        lines += [
-            "\n=== POST-RECOVERY VERIFICATION ===",
-            f"Selected route: {metrics['Selected route']}",
-            f"IP connectivity: {'PASS' if result['ip_connectivity'] else 'FAIL'}",
-            f"DNS resolution: {'PASS' if result['dns_resolution'] else 'FAIL'}",
-            f"Overall health: {result['status']}",
-            f"\nRecovery execution time: {self.rec_time:.6f} s"
-        ]
-
-        self.show_rec("\n".join(lines))
+        combined_rec = f"{rep_c}\n\n{rep_d}\n\nRecovery execution time: {self.rec_time:.6f} s"
+        self.show_rec(combined_rec)
         self.bottom_tabs.select(1)
 
         # Performance Tab Output
@@ -2051,11 +2639,38 @@ class App:
         self.draw()
         self.update_route_comparison()
         self.update_inventory()
+        self.last_recovery_status = result.get("status", "UNKNOWN")
+        self.last_recovery_service_availability = result.get("service_availability", "AVAILABLE")
+        self.last_recovery_network_health = result.get("network_health", "HEALTHY")
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
+        self.refresh_audit_view()
+        self.update_recovery_planner_view(result.get("plan"))
+        get_analytics_engine().record_telemetry(
+            self.g,
+            event_label="Recovery Verified",
+            phase="RECOVERY",
+            observations=result.get("post_observations")
+        )
+        self.refresh_analytics_graphs()
 
         if result["verified"]:
-            self.update_header_status("HEALTHY", "RECOVERY VERIFIED & STABLE")
+            if result.get("status") == "SERVICE MAINTAINED":
+                self.update_header_status("DEGRADED", "SERVICE MAINTAINED (ALTERNATE ROUTE ACTIVE)")
+            elif result.get("status") == "NO RECOVERY REQUIRED":
+                self.update_header_status("HEALTHY", "BASELINE HEALTHY: NO RECOVERY REQUIRED")
+            elif result.get("status") == "PARTIAL RECOVERY":
+                self.update_header_status("DEGRADED", "PARTIAL RECOVERY: FAULT BYPASSED (DEGRADED)")
+            else:
+                self.update_header_status("HEALTHY", "RECOVERY VERIFIED & STABLE")
+        elif result.get("status") == "PARTIAL RECOVERY":
+            self.update_header_status("DEGRADED", "PARTIAL RECOVERY: FAULT BYPASSED (DEGRADED)")
+        elif result.get("status") == "OPTIMIZATION UNAVAILABLE":
+            self.update_header_status("DEGRADED", "OPTIMIZATION UNAVAILABLE: NO LOWER-LATENCY ROUTE")
         elif result.get("status") == "RECOVERY UNAVAILABLE":
             self.update_header_status("CRITICAL", "RECOVERY UNAVAILABLE: NO ALTERNATE ROUTE")
+        elif result.get("status") == "RECOVERY FAILED":
+            self.update_header_status("CRITICAL", "RECOVERY FAILED: VERIFICATION ERROR")
         else:
             self.update_header_status("CRITICAL", "RECOVERY NOT VERIFIED")
 
@@ -2084,6 +2699,12 @@ class App:
         self.draw()
         self.update_route_comparison()
         self.update_inventory()
+        get_fault_registry().clear_all()
+        self.last_recovery_status = "NOMINAL"
+        self.last_recovery_service_availability = "AVAILABLE"
+        self.last_recovery_network_health = "HEALTHY"
+        self.update_kpi_dashboard()
+        self.refresh_active_faults_view()
         self.update_header_status("HEALTHY", "LOGICAL WORKSPACE RESTORED")
 
         self.show_diag("Baseline network restored. All links UP and 0% loss.\nReady for simulation.")
@@ -2091,6 +2712,8 @@ class App:
         self.metrics_text.delete("1.0", "end")
         self.metrics_text.insert("end", "Run 'Recover & Verify' to generate complete performance metrics.")
         self.log_event("Simulation reset; baseline topology restored.")
+        get_analytics_engine().record_telemetry(self.g, event_label="Baseline Restored", phase="BASELINE")
+        self.refresh_analytics_graphs()
 
     def new_workspace(self):
         if messagebox.askyesno("New Logical Workspace", "Clear current topology and start a blank workspace?"):
@@ -2146,9 +2769,19 @@ class App:
             self.explanation_label.config(text=f"No route available between {src} and {dst}.")
             return
 
+        active_route = get_active_route(self.g, source=src, target=dst)
         for r in routes:
             is_best = (r["path"] == best_path)
-            sel_text = "★ YES" if is_best else "NO"
+            is_active = (r["path"] == active_route)
+            if is_active and is_best:
+                sel_text = "★ ACTIVE & REC"
+            elif is_active:
+                sel_text = "● ACTIVE"
+            elif is_best:
+                sel_text = "✦ RECOMMENDED"
+            else:
+                sel_text = "CANDIDATE"
+
             self.route_tree.insert("", "end", values=(
                 r["path_str"],
                 r["cost"],
@@ -2158,7 +2791,8 @@ class App:
                 sel_text
             ))
 
-        self.explanation_label.config(text=selection["explanation"])
+        active_str = " -> ".join(active_route) if active_route else "None"
+        self.explanation_label.config(text=f"[Active Forwarding Route: {active_str}] Policy Decision: {selection['explanation']}")
 
     def on_endpoint_changed(self):
         self.update_route_comparison()
@@ -2652,6 +3286,8 @@ class App:
             self.draw()
             self.update_route_comparison()
             self.update_inventory()
+            self.update_kpi_dashboard()
+            self.refresh_active_faults_view()
             self.update_header_status("HEALTHY", "CUSTOM TOPOLOGY LOADED")
             self.log_event(f"Topology loaded from: {path} ({g.number_of_nodes()} devices, {g.number_of_edges()} links)")
             messagebox.showinfo("Loaded", f"Topology loaded successfully from:\n{path}")

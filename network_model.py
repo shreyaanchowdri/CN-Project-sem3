@@ -1,6 +1,7 @@
 """Graph-based virtual network model and topology management."""
 import json
 import networkx as nx
+from fault_registry import FaultRegistry, get_fault_registry
 
 NODES = {
     "PC1": "End device",
@@ -101,7 +102,10 @@ def build_network():
         gateway="R1",
         dns_available=True,
         scenario="No fault",
-        node_positions=dict(DEFAULT_POSITIONS)
+        node_positions=dict(DEFAULT_POSITIONS),
+        active_path=["PC1", "R1", "R2", "Server"],
+        activated_route=["PC1", "R1", "R2", "Server"],
+        fault_registry=FaultRegistry()
     )
     return g
 
@@ -275,7 +279,10 @@ def save_topology_to_dict(g, positions=None):
         "metadata": {
             "gateway": g.graph.get("gateway", "R1"),
             "dns_available": bool(g.graph.get("dns_available", True)),
-            "scenario": g.graph.get("scenario", "No fault")
+            "scenario": g.graph.get("scenario", "No fault"),
+            "active_path": g.graph.get("active_path"),
+            "activated_route": g.graph.get("activated_route"),
+            "fault_registry": get_fault_registry(g).to_dict()
         },
         "devices": devices,
         "links": links
@@ -295,10 +302,15 @@ def load_topology_from_dict(data):
 
     g = nx.Graph()
     meta = data.get("metadata", {})
+    reg_data = meta.get("fault_registry")
+    reg = FaultRegistry.from_dict(reg_data) if (reg_data and isinstance(reg_data, dict)) else FaultRegistry()
     g.graph.update(
         gateway=meta.get("gateway", "R1"),
         dns_available=bool(meta.get("dns_available", True)),
-        scenario=meta.get("scenario", "No fault")
+        scenario=meta.get("scenario", "No fault"),
+        active_path=meta.get("active_path"),
+        activated_route=meta.get("activated_route"),
+        fault_registry=reg
     )
 
     positions = {}
@@ -402,6 +414,13 @@ def calculate_route_metrics(g, path):
 
     bottlenecks = down_links + high_latency_links + loss_links
 
+    # Independent probabilistic packet loss: P(e2e) = 1 - product(1 - p_i / 100)
+    prob_success = 1.0
+    for loss_val in packet_losses:
+        p_i = max(0.0, min(100.0, float(loss_val))) / 100.0
+        prob_success *= (1.0 - p_i)
+    prob_loss_pct = round((1.0 - prob_success) * 100.0, 2)
+
     return {
         "path": list(path),
         "path_str": " -> ".join(path),
@@ -410,6 +429,8 @@ def calculate_route_metrics(g, path):
         "latency_ms": round(total_latency, 2),
         "max_loss": round(max(packet_losses, default=0.0), 2),
         "avg_loss": round(sum(packet_losses) / len(packet_losses), 2) if packet_losses else 0.0,
+        "probabilistic_loss": prob_loss_pct,
+        "end_to_end_loss": prob_loss_pct,
         "is_usable": is_usable,
         "is_degraded": is_degraded,
         "availability": availability,
@@ -578,3 +599,44 @@ def path_is_usable(g, path):
     return bool(path) and len(path) >= 2 and all(
         g.has_edge(a, b) and g[a][b].get("status") == "UP" for a, b in zip(path, path[1:])
     )
+
+def get_active_route(g, source=None, target=None):
+    """Retrieve the currently activated forwarding route in the network model.
+    
+    Distinguishes discovered routes, recommended routes, and activated routes.
+    If no route has been explicitly activated in forwarding state, returns None
+    or falls back to the default baseline primary path if matching endpoints.
+    """
+    if not g or g.number_of_nodes() == 0:
+        return None
+    src, dst = resolve_endpoints(g, source, target)
+    active = g.graph.get("active_path")
+    if active and isinstance(active, (list, tuple)) and len(active) >= 2:
+        if active[0] == src and active[-1] == dst:
+            return list(active)
+    # Default baseline primary path PC1 -> R1 -> R2 -> Server if configured
+    if src == "PC1" and dst == "Server" and all(n in g for n in ["PC1", "R1", "R2", "Server"]):
+        return ["PC1", "R1", "R2", "Server"]
+    return list(active) if active else None
+
+def set_active_route(g, path):
+    """Explicitly activate a route in the simulated forwarding state.
+    
+    Only the Automated Recovery module (or initial baseline setup) activates routes.
+    Monitoring and Diagnosis modules must NOT activate routes.
+    """
+    if path:
+        p_list = list(path)
+        g.graph["active_path"] = p_list
+        g.graph["activated_route"] = p_list
+        return p_list
+    else:
+        g.graph.pop("active_path", None)
+        g.graph.pop("activated_route", None)
+        return None
+
+def clear_active_route(g):
+    """Clear the active forwarding route from network state."""
+    g.graph.pop("active_path", None)
+    g.graph.pop("activated_route", None)
+

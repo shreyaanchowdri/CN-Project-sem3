@@ -1,3 +1,6 @@
+﻿Command exited with code 0.
+
+Command output:
 test_add_device_duplicate_and_invalid (test_project.FrameworkTests.test_add_device_duplicate_and_invalid) ... ok
 test_add_device_valid_types (test_project.FrameworkTests.test_add_device_valid_types) ... ok
 test_baseline_path (test_project.FrameworkTests.test_baseline_path) ... ok
@@ -93,8 +96,264 @@ test_save_and_load_topology (test_project.FrameworkTests.test_save_and_load_topo
 test_topology_has_five_links_and_pc_connection (test_project.FrameworkTests.test_topology_has_five_links_and_pc_connection) ... ok
 test_undo_and_redo_device_and_link_operations (test_project.FrameworkTests.test_undo_and_redo_device_and_link_operations)
 Verifies undo and redo for device addition, connection, and deletion. ... ok
+test_10_dns_restoration_and_independent_verification (test_project.RedesignedArchitectureTests.test_10_dns_restoration_and_independent_verification)
+10. DNS restoration and independent verification: DNS resolution verified separately from IP. ... ok
+test_11_latency_improvement_verification (test_project.RedesignedArchitectureTests.test_11_latency_improvement_verification)
+11. Latency improvement: reroutes to lower latency and verifies improvement; reports when unavailable. ... ok
+test_12_packet_loss_improvement_verification (test_project.RedesignedArchitectureTests.test_12_packet_loss_improvement_verification)
+12. Packet loss improvement: reroutes to lower loss route and verifies improvement. ... ok
+test_13_recovery_unavailable_when_no_healthy_route_exists (test_project.RedesignedArchitectureTests.test_13_recovery_unavailable_when_no_healthy_route_exists)
+13. Recovery unavailable when no healthy route exists: honest reporting when failover impossible. ... ok
+test_14_failed_recovery_must_not_be_reported_as_successful (test_project.RedesignedArchitectureTests.test_14_failed_recovery_must_not_be_reported_as_successful)
+14. Failed recovery must not be reported as successful: verified flag is False on failure. ... ok
+test_15_failed_links_must_remain_down_after_failover (test_project.RedesignedArchitectureTests.test_15_failed_links_must_remain_down_after_failover)
+15. Failed links must remain DOWN after failover: recovery must never falsely mark failed links UP. ... ok
+test_16_repeated_diagnosis_produces_consistent_results (test_project.RedesignedArchitectureTests.test_16_repeated_diagnosis_produces_consistent_results)
+16. Repeated diagnosis consistency: multiple consecutive runs yield identical findings. ... ok
+test_17_recovery_does_not_modify_unrelated_network_state (test_project.RedesignedArchitectureTests.test_17_recovery_does_not_modify_unrelated_network_state)
+17. Recovery does not modify unrelated network state: unassociated nodes/links remain untouched. ... ok
+test_18_fresh_monitoring_observations_collected_after_recovery (test_project.RedesignedArchitectureTests.test_18_fresh_monitoring_observations_collected_after_recovery)
+18. Fresh post-recovery observations and distinct four-report generation. ... ok
+test_19_failed_link_with_alternative_route_already_active (test_project.RedesignedArchitectureTests.test_19_failed_link_with_alternative_route_already_active)
+19. Failed link with alternative route already active: service maintained without route switch. ... ok
+test_1_no_fault_baseline (test_project.RedesignedArchitectureTests.test_1_no_fault_baseline)
+1. No-fault baseline: verifies monitoring, diagnosis, recovery, and verification on healthy network. ... ok
+test_20_failed_link_with_alternative_route_discovered_but_not_active (test_project.RedesignedArchitectureTests.test_20_failed_link_with_alternative_route_discovered_but_not_active)
+20. Failed link when alternative is not active: activates failover and counts as 1 corrective action. ... ok
+test_21_failed_link_with_no_alternative_route (test_project.RedesignedArchitectureTests.test_21_failed_link_with_no_alternative_route)
+21. Failed link with no alternative route: reports recovery unavailable, service unavailable. ... ok
+test_22_recovery_action_count_equals_actual_corrective_operations (test_project.RedesignedArchitectureTests.test_22_recovery_action_count_equals_actual_corrective_operations)
+22. Corrective action count: strictly equals actual state modifications performed. ... ok
+test_23_verification_does_not_count_as_recovery (test_project.RedesignedArchitectureTests.test_23_verification_does_not_count_as_recovery)
+23. Verification does not count as recovery: passing checks never increment action count. ... ok
+test_24_service_availability_and_network_health_reported_separately (test_project.RedesignedArchitectureTests.test_24_service_availability_and_network_health_reported_separately)
+24. Service availability and network health: reported separately and accurately. ... ok
+test_2_each_of_five_individual_fault_scenarios (test_project.RedesignedArchitectureTests.test_2_each_of_five_individual_fault_scenarios)
+2. Verifies independent diagnosis and recovery for all five fault scenarios. ... ok
+test_3_multiple_simultaneous_faults (test_project.RedesignedArchitectureTests.test_3_multiple_simultaneous_faults)
+3. Multiple simultaneous faults: evaluates all 5 rules independently without early exit. ... ok
+test_4_diagnosis_independence_from_injected_fault_labels (test_project.RedesignedArchitectureTests.test_4_diagnosis_independence_from_injected_fault_labels)
+4. Diagnosis independence: operates purely on telemetry, ignoring deceptive fault labels. ... ok
+test_5_evidence_based_diagnosis (test_project.RedesignedArchitectureTests.test_5_evidence_based_diagnosis)
+5. Evidence-based diagnosis: confidence values and evidence strings reflect concrete observations. ... ok
+test_6_severity_and_impact_classification (test_project.RedesignedArchitectureTests.test_6_severity_and_impact_classification)
+6. Severity and impact classification: reflects actual network impact and redundancy. ... ok
+test_7_route_discovery_without_activation (test_project.RedesignedArchitectureTests.test_7_route_discovery_without_activation)
+7. Route discovery without activation: monitoring and diagnosis must NOT activate routes. ... ok
+test_8_route_activation_only_during_recovery (test_project.RedesignedArchitectureTests.test_8_route_activation_only_during_recovery)
+8. Route activation only during recovery: recovery module activates routes when appropriate. ... ok
+test_9_correct_gateway_restoration (test_project.RedesignedArchitectureTests.test_9_correct_gateway_restoration)
+9. Correct gateway restoration: gateway derived from connected router, not rerouted around. ... ok
+test_analytics_csv_and_png_export (test_project.Stage10AnalyticsEngineTests.test_analytics_csv_and_png_export)
+Verifies exporting analytics telemetry time-series to CSV and PNG files. ... ok
+test_empty_analytics_dataset_handling (test_project.Stage10AnalyticsEngineTests.test_empty_analytics_dataset_handling)
+Verifies render and MTTR calculate gracefully on empty initial dataset. ... ok
+test_mttr_calculation (test_project.Stage10AnalyticsEngineTests.test_mttr_calculation)
+Verifies Mean Time to Recovery (MTTR) and recovery success rate computation. ... ok
+test_render_six_graphs_without_error (test_project.Stage10AnalyticsEngineTests.test_render_six_graphs_without_error)
+Verifies rendering all 6 analytical subplots onto a Matplotlib figure. ... ok
+test_telemetry_recording_and_datapoints (test_project.Stage10AnalyticsEngineTests.test_telemetry_recording_and_datapoints)
+Verifies capturing telemetry time-series across baseline, fault, and recovery. ... ok
+test_approval_and_rejection_workflow (test_project.Stage10DecisionEngineTests.test_approval_and_rejection_workflow)
+Verifies operator approval and rejection lifecycle state transitions. ... ok
+test_blocked_decision_on_network_partition (test_project.Stage10DecisionEngineTests.test_blocked_decision_on_network_partition)
+Verifies complete partition results in BLOCKED decision outcome. ... ok
+test_execution_and_independent_verification (test_project.Stage10DecisionEngineTests.test_execution_and_independent_verification)
+Verifies executing approved strategy triggers recovery and verifies network state. ... ok
+test_operating_policies_manual_vs_hybrid_vs_auto (test_project.Stage10DecisionEngineTests.test_operating_policies_manual_vs_hybrid_vs_auto)
+Verifies operating policies govern whether actions require human approval. ... ok
+test_risk_scoring_and_factors (test_project.Stage10DecisionEngineTests.test_risk_scoring_and_factors)
+Verifies multi-factor risk assessment scoring and threshold categorization. ... ok
+test_strategy_generation_healthy_vs_fault (test_project.Stage10DecisionEngineTests.test_strategy_generation_healthy_vs_fault)
+Verifies generating multiple viable strategies on degraded network vs baseline. ... ok
+test_demonstration_scenario_a_multiple_link_failures (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_a_multiple_link_failures)
+Scenario A: Multiple link failures - monitoring, diagnosis, route discovery, coordinated recovery. ... ok
+test_demonstration_scenario_b_combined_fault_types (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_b_combined_fault_types)
+Scenario B: Combined fault types (Link failure + DNS failure + Wrong gateway) simultaneously. ... ok
+test_demonstration_scenario_c_partial_recovery_partition (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_c_partial_recovery_partition)
+Scenario C: Partial recovery - DNS/gateway recovered but severed topology prevents end-to-end traffic. ... ok
+test_demonstration_scenario_d_service_already_maintained (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_d_service_already_maintained)
+Scenario D: Service already maintained - failed link is not on active path. ... ok
+test_demonstration_scenario_e_multiple_packet_loss_links (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_e_multiple_packet_loss_links)
+Scenario E: Multiple packet loss links - probabilistic loss calculated and rerouted. ... ok
+test_demonstration_scenario_f_failed_recovery_fallback_rollback (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_f_failed_recovery_fallback_rollback)
+Scenario F: Fallback and rollback - verifies transaction safety on failure. ... ok
+test_demonstration_scenario_g_simulated_terminal_and_dashboard_consistency (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_g_simulated_terminal_and_dashboard_consistency)
+Scenario G: Terminal and dashboard consistency - live topology state matches across both. ... ok
+test_demonstration_scenario_h_professional_dashboard_end_to_end (test_project.Stage10DemonstrationScenariosTests.test_demonstration_scenario_h_professional_dashboard_end_to_end)
+Scenario H: Professional dashboard end-to-end integration and telemetry updates. ... ok
+test_network_analytics_tab_ui_and_refresh (test_project.Stage10InteractiveRecoveryCenterUITests.test_network_analytics_tab_ui_and_refresh)
+Verifies Network Analytics tab initializes and refreshes graphs cleanly. ... ok
+test_recovery_center_investigation_and_approval (test_project.Stage10InteractiveRecoveryCenterUITests.test_recovery_center_investigation_and_approval)
+Verifies investigate -> generate -> approve -> execute workflow via Decision Engine. ... ok
+test_recovery_center_ui_population_and_policy (test_project.Stage10InteractiveRecoveryCenterUITests.test_recovery_center_ui_population_and_policy)
+Verifies clean 8-tab bottom notebook lineup and backend decision policy configuration. ... ok
+test_active_vs_historical_fault_separation (test_project.Stage1FaultRegistryTests.test_active_vs_historical_fault_separation)
+Verifies active faults remain strictly separate from historical archived faults. ... ok
+test_backward_compatibility_single_fault_injection (test_project.Stage1FaultRegistryTests.test_backward_compatibility_single_fault_injection)
+Verifies existing single-fault injection retains legacy return structure and adds registry IDs. ... ok
+test_clear_fault_instance_preserves_other_active_faults (test_project.Stage1FaultRegistryTests.test_clear_fault_instance_preserves_other_active_faults)
+Verifies clearing a specific fault instance restores only that component without affecting other faults. ... ok
+test_fault_record_creation_and_attributes (test_project.Stage1FaultRegistryTests.test_fault_record_creation_and_attributes)
+Verifies FaultRecord attributes, target property alias, and serialization. ... ok
+test_fault_registry_id_generation_and_lookup (test_project.Stage1FaultRegistryTests.test_fault_registry_id_generation_and_lookup)
+Verifies unique sequential fault IDs, scenario IDs, and dictionary lookups. ... ok
+test_fault_registry_json_persistence (test_project.Stage1FaultRegistryTests.test_fault_registry_json_persistence)
+Verifies fault registry is preserved across JSON save and load. ... ok
+test_fault_registry_not_used_as_evidence_for_diagnosis (test_project.Stage1FaultRegistryTests.test_fault_registry_not_used_as_evidence_for_diagnosis)
+Proves monitoring and diagnosis operate strictly on telemetry and do NOT read the fault registry. ... ok
+test_fault_status_lifecycle_and_transitions (test_project.Stage1FaultRegistryTests.test_fault_status_lifecycle_and_transitions)
+Verifies valid lifecycle states, transitions, history tracking, and invalid state rejection. ... ok
+test_mixed_simultaneous_fault_types (test_project.Stage1FaultRegistryTests.test_mixed_simultaneous_fault_types)
+Verifies injecting mixed fault types simultaneously (Link + Gateway + DNS). ... ok
+test_multiple_simultaneous_high_latency_links (test_project.Stage1FaultRegistryTests.test_multiple_simultaneous_high_latency_links)
+Verifies injecting multiple high-latency links simultaneously with individual latency values. ... ok
+test_multiple_simultaneous_link_failures (test_project.Stage1FaultRegistryTests.test_multiple_simultaneous_link_failures)
+Verifies injecting three simultaneous link failures records all three as active. ... ok
+test_multiple_simultaneous_lossy_links (test_project.Stage1FaultRegistryTests.test_multiple_simultaneous_lossy_links)
+Verifies injecting multiple lossy links simultaneously with individual loss percentages. ... ok
+test_atomic_rollback_on_partial_failure (test_project.Stage2MultiFaultInjectionTests.test_atomic_rollback_on_partial_failure)
+Verifies atomic rollback restores exact graph state if an error occurs mid-application. ... ok
+test_batch_injection_all_five_fault_categories (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_all_five_fault_categories)
+Verifies injecting all five fault categories simultaneously in one atomic batch. ... ok
+test_batch_injection_multiple_high_latency_instances (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_multiple_high_latency_instances)
+Verifies injecting multiple high-latency links simultaneously with individual latency values. ... ok
+test_batch_injection_multiple_packet_loss_instances (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_multiple_packet_loss_instances)
+Verifies injecting multiple lossy links simultaneously with individual loss percentages. ... ok
+test_batch_injection_single_fault (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_single_fault)
+Verifies injecting a single fault through the atomic batch engine. ... ok
+test_batch_injection_three_simultaneous_link_failures (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_three_simultaneous_link_failures)
+Verifies injecting three or more simultaneous link failures. ... ok
+test_batch_injection_two_different_fault_types (test_project.Stage2MultiFaultInjectionTests.test_batch_injection_two_different_fault_types)
+Verifies injecting two different fault types simultaneously (Link Failure + DNS). ... ok
+test_multifault_scenario_builder_and_preview (test_project.Stage2MultiFaultInjectionTests.test_multifault_scenario_builder_and_preview)
+Verifies MultiFaultScenario builder, preview projection, and apply. ... ok
+test_predefined_scenarios_execution (test_project.Stage2MultiFaultInjectionTests.test_predefined_scenarios_execution)
+Verifies all predefined benchmark scenarios validate and apply cleanly. ... ok
+test_validation_rejects_duplicate_fault_targets (test_project.Stage2MultiFaultInjectionTests.test_validation_rejects_duplicate_fault_targets)
+Verifies pre-injection validation rejects duplicate conflicting targets in the same batch. ... ok
+test_validation_rejects_invalid_link_target (test_project.Stage2MultiFaultInjectionTests.test_validation_rejects_invalid_link_target)
+Verifies pre-injection validation rejects nonexistent link targets without mutating graph. ... ok
+test_validation_rejects_out_of_range_parameters (test_project.Stage2MultiFaultInjectionTests.test_validation_rejects_out_of_range_parameters)
+Verifies pre-injection validation rejects out-of-range packet loss and negative latency. ... ok
+test_device_monitoring_and_reachability (test_project.Stage3MonitoringAndPartitionTests.test_device_monitoring_and_reachability)
+Verifies device monitoring reports device status and identifies unreachable nodes. ... ok
+test_end_to_end_latency_calculation (test_project.Stage3MonitoringAndPartitionTests.test_end_to_end_latency_calculation)
+Verifies cumulative latency across path hops is accurately calculated. ... ok
+test_end_to_end_probabilistic_packet_loss_calculation (test_project.Stage3MonitoringAndPartitionTests.test_end_to_end_probabilistic_packet_loss_calculation)
+Verifies end-to-end packet loss calculates P(e2e loss) = 1 - product(1 - p_i). ... ok
+test_format_monitoring_report_contains_partition_and_loss_info (test_project.Stage3MonitoringAndPartitionTests.test_format_monitoring_report_contains_partition_and_loss_info)
+Verifies format_monitoring_report includes partition telemetry and probabilistic formula notice. ... ok
+test_link_monitoring_telemetry_and_classification (test_project.Stage3MonitoringAndPartitionTests.test_link_monitoring_telemetry_and_classification)
+Verifies link monitoring classifies links as UP, DOWN, and DEGRADED. ... ok
+test_monitoring_does_not_activate_routes (test_project.Stage3MonitoringAndPartitionTests.test_monitoring_does_not_activate_routes)
+Verifies monitoring evaluates candidates but never modifies graph active_path. ... ok
+test_network_partition_detection_multiple_components (test_project.Stage3MonitoringAndPartitionTests.test_network_partition_detection_multiple_components)
+Verifies NetworkX connected components detects partitions when severed links divide network. ... ok
+test_network_partition_isolated_device (test_project.Stage3MonitoringAndPartitionTests.test_network_partition_isolated_device)
+Verifies isolated devices with degree 0 in the operational graph are accurately identified. ... ok
+test_network_partition_removal (test_project.Stage3MonitoringAndPartitionTests.test_network_partition_removal)
+Verifies restoring severed links eliminates partition and reports a single connected segment. ... ok
+test_confidence_calibration (test_project.Stage4MultiFaultDiagnosisTests.test_confidence_calibration)
+Verifies calibrated confidence scores: direct 1.0, audit 0.98, DNS probe 0.95. ... ok
+test_finding_id_uniqueness_and_format (test_project.Stage4MultiFaultDiagnosisTests.test_finding_id_uniqueness_and_format)
+Verifies all emitted diagnostic findings follow the sequential DIAG-XXXX format. ... ok
+test_finding_tuple_backward_compatibility (test_project.Stage4MultiFaultDiagnosisTests.test_finding_tuple_backward_compatibility)
+Verifies DiagnosticFinding supports tuple unpacking and indexing. ... ok
+test_format_diagnosis_report_contains_structured_fields (test_project.Stage4MultiFaultDiagnosisTests.test_format_diagnosis_report_contains_structured_fields)
+Verifies format_diagnosis_report includes finding IDs, types, and summary metrics. ... ok
+test_multi_fault_diagnosis_mixed_scenarios (test_project.Stage4MultiFaultDiagnosisTests.test_multi_fault_diagnosis_mixed_scenarios)
+Verifies Link failure + Wrong Gateway + DNS failure diagnosed simultaneously. ... ok
+test_multi_fault_diagnosis_multiple_link_failures (test_project.Stage4MultiFaultDiagnosisTests.test_multi_fault_diagnosis_multiple_link_failures)
+Verifies 3 simultaneous link failures produce 3 distinct Link Failure findings. ... ok
+test_root_cause_vs_secondary_symptom (test_project.Stage4MultiFaultDiagnosisTests.test_root_cause_vs_secondary_symptom)
+Verifies network partition is classified as SECONDARY_SYMPTOM and severed links as ROOT_CAUSE. ... ok
+test_format_plan_report_contains_all_sections (test_project.Stage5RecoveryPlannerTests.test_format_plan_report_contains_all_sections)
+Verifies format_plan_report includes decision, candidate routes, and action sequences. ... ok
+test_planner_action_dependency_ordering (test_project.Stage5RecoveryPlannerTests.test_planner_action_dependency_ordering)
+Verifies actions are prioritized and ordered with dependencies (Gateway before DNS). ... ok
+test_planner_combines_multiple_faults_into_single_reroute (test_project.Stage5RecoveryPlannerTests.test_planner_combines_multiple_faults_into_single_reroute)
+Verifies multiple link failures and degraded links combine into exactly ONE optimal failover route activation. ... ok
+test_planner_does_not_mutate_network_state (test_project.Stage5RecoveryPlannerTests.test_planner_does_not_mutate_network_state)
+Verifies the recovery planner is strictly read-only and never modifies the network graph. ... ok
+test_planner_multi_objective_route_optimization_balanced (test_project.Stage5RecoveryPlannerTests.test_planner_multi_objective_route_optimization_balanced)
+Verifies balanced route optimization scores candidate routes using normalized weights. ... ok
+test_planner_no_feasible_recovery_on_total_partition (test_project.Stage5RecoveryPlannerTests.test_planner_no_feasible_recovery_on_total_partition)
+Verifies complete partition between endpoints yields NO_FEASIBLE_RECOVERY and zero valid candidates. ... ok
+test_planner_nominal_baseline (test_project.Stage5RecoveryPlannerTests.test_planner_nominal_baseline)
+Verifies planner on a healthy network produces NO_ACTION_REQUIRED and 0 actions. ... ok
+test_planner_service_already_maintained (test_project.Stage5RecoveryPlannerTests.test_planner_service_already_maintained)
+Verifies failed link bypassed by current active route produces SERVICE_ALREADY_MAINTAINED with 0 actions. ... ok
+test_combined_multi_fault_coordinated_recovery (test_project.Stage6CoordinatedRecoveryTests.test_combined_multi_fault_coordinated_recovery)
+Verifies Link failure + Gateway + DNS failure recovered together in priority order. ... ok
+test_dns_service_restoration_and_verification (test_project.Stage6CoordinatedRecoveryTests.test_dns_service_restoration_and_verification)
+Verifies DNS service failure is repaired and verified independently. ... ok
+test_fault_bypass_preserves_failed_links_as_down (test_project.Stage6CoordinatedRecoveryTests.test_fault_bypass_preserves_failed_links_as_down)
+Verifies failover reroutes traffic while strictly preserving failed links in DOWN state. ... ok
+test_isolated_execution_id_per_run (test_project.Stage6CoordinatedRecoveryTests.test_isolated_execution_id_per_run)
+Verifies every recovery run gets a unique execution ID and clean context. ... ok
+test_partial_recovery_reporting (test_project.Stage6CoordinatedRecoveryTests.test_partial_recovery_reporting)
+Verifies partition preventing end-to-end traffic reports RECOVERY UNAVAILABLE or PARTIAL. ... ok
+test_wrong_gateway_restoration_and_verification (test_project.Stage6CoordinatedRecoveryTests.test_wrong_gateway_restoration_and_verification)
+Verifies gateway misconfiguration is corrected dynamically and verified. ... ok
+test_zero_action_count_when_service_maintained (test_project.Stage6CoordinatedRecoveryTests.test_zero_action_count_when_service_maintained)
+Verifies zero actions executed when healthy alternative route is already active. ... ok
+test_audit_export_csv_and_json (test_project.Stage7VerificationAndAuditTests.test_audit_export_csv_and_json)
+Verifies exporting audit logs to CSV and JSON formats, and JSON import. ... ok
+test_audit_filtering (test_project.Stage7VerificationAndAuditTests.test_audit_filtering)
+Verifies filtering audit records by status and scenario ID. ... ok
+test_audit_logger_calculates_metric_deltas (test_project.Stage7VerificationAndAuditTests.test_audit_logger_calculates_metric_deltas)
+Verifies metric delta calculation between before and after observations. ... ok
+test_audit_logger_compute_analytics (test_project.Stage7VerificationAndAuditTests.test_audit_logger_compute_analytics)
+Verifies aggregate analytics computation over multiple recovery runs. ... ok
+test_audit_logger_records_recovery_execution (test_project.Stage7VerificationAndAuditTests.test_audit_logger_records_recovery_execution)
+Verifies AuditLogger captures recovery runs and maintains audit history. ... ok
+test_audit_record_creation_and_attributes (test_project.Stage7VerificationAndAuditTests.test_audit_record_creation_and_attributes)
+Verifies AuditRecord contains all required fields and serializes cleanly. ... ok
+test_independent_verification_report_format (test_project.Stage7VerificationAndAuditTests.test_independent_verification_report_format)
+Verifies format_verification_report (Report D) produces required structured sections. ... ok
+test_audit_view_population_and_exports (test_project.Stage8DashboardTests.test_audit_view_population_and_exports)
+Verifies Audit History tab displays records and triggers export. ... ok
+test_custom_batch_builder_ui (test_project.Stage8DashboardTests.test_custom_batch_builder_ui)
+Verifies building and injecting a custom multi-fault batch via UI. ... ok
+test_kpi_dashboard_initialization_and_update (test_project.Stage8DashboardTests.test_kpi_dashboard_initialization_and_update)
+Verifies KPI cards exist and update values when faults are injected and resolved. ... ok
+test_predefined_scenario_injection_via_ui (test_project.Stage8DashboardTests.test_predefined_scenario_injection_via_ui)
+Verifies predefined multi-fault scenario injection via dashboard UI. ... ok
+test_recovery_planner_view_population (test_project.Stage8DashboardTests.test_recovery_planner_view_population)
+Verifies Recovery Planner tab displays candidate routes and actions. ... ok
+test_terminal_diagnose_and_recover (test_project.Stage9TerminalTests.test_terminal_diagnose_and_recover)
+Verifies running diagnose and recover commands directly from the terminal. ... ok
+test_terminal_hostname_and_connect (test_project.Stage9TerminalTests.test_terminal_hostname_and_connect)
+Verifies hostname output and host context switching. ... ok
+test_terminal_initialization (test_project.Stage9TerminalTests.test_terminal_initialization)
+Verifies terminal window initializes with prompt, banner and host context. ... ok
+test_terminal_ipconfig (test_project.Stage9TerminalTests.test_terminal_ipconfig)
+Verifies ipconfig displays IP, subnet mask, gateway, and DNS. ... ok
+test_terminal_ping_healthy_and_down (test_project.Stage9TerminalTests.test_terminal_ping_healthy_and_down)
+Verifies ping responses on healthy network vs partitioned network. ... ok
+test_terminal_show_commands (test_project.Stage9TerminalTests.test_terminal_show_commands)
+Verifies show devices, show links, and show routes output. ... ok
+test_terminal_tracert_and_nslookup (test_project.Stage9TerminalTests.test_terminal_tracert_and_nslookup)
+Verifies traceroute hops and nslookup name resolution. ... ok
+test_deduplicated_affected_components_in_before_state (test_project.SurgicalBugFixPassTests.test_deduplicated_affected_components_in_before_state)
+2. Deduplicate Affected Components in Before State so links are never listed twice. ... ok
+test_failed_link_isolation_passes_on_degraded_bypass_route (test_project.SurgicalBugFixPassTests.test_failed_link_isolation_passes_on_degraded_bypass_route)
+3. Failed Link Isolation must PASS when active route avoids DOWN link and traverses an UP degraded link. ... ok
+test_generate_strategies_directly_after_inject_fault (test_project.SurgicalBugFixPassTests.test_generate_strategies_directly_after_inject_fault)
+7. Generate Strategies directly after Inject Fault evaluates candidates with live telemetry metrics. ... ok
+test_gui_header_status_banner_synchronization (test_project.SurgicalBugFixPassTests.test_gui_header_status_banner_synchronization)
+6. Top-right status banner synchronizes dynamically on recovery and strategy execution. ... ok
+test_live_metrics_in_strategy_assessment (test_project.SurgicalBugFixPassTests.test_live_metrics_in_strategy_assessment)
+5. Expected Loss in Recovery Strategy Assessment computes live metrics (55% loss on active route). ... ok
+test_recovery_center_all_button_callbacks (test_project.SurgicalBugFixPassTests.test_recovery_center_all_button_callbacks)
+8. Comprehensive test of decision lifecycle: compare, reject, approve, execute, verify. ... ok
+test_stale_active_route_cleared_on_partition (test_project.SurgicalBugFixPassTests.test_stale_active_route_cleared_on_partition)
+4. Stale Active Forwarding Route must report 'None (No valid path)' on network partition. ... ok
+test_zero_corrective_actions_on_unavailable_recovery (test_project.SurgicalBugFixPassTests.test_zero_corrective_actions_on_unavailable_recovery)
+1. When Action Executed is NO, Corrective Actions Executed must report 0 and Reason must be accurate. ... ok
 
 ----------------------------------------------------------------------
-Ran 64 tests in 33.178s
+Ran 192 tests in 52.355s
 
 OK
