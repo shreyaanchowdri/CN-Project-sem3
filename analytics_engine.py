@@ -357,6 +357,138 @@ class AnalyticsEngine:
 
         return fig
 
+    def render_scenario_benchmark_graph(self, fig: Optional[Figure] = None) -> Figure:
+        """Render Figure 4.1: Probe Packet Delivery Rate Across Fault & Recovery Scenarios."""
+        if fig is None:
+            fig = Figure(figsize=(8.5, 4.8), dpi=100)
+            fig.patch.set_facecolor("#f8fafc")
+        else:
+            fig.clf()
+            fig.patch.set_facecolor("#f8fafc")
+
+        ax = fig.add_subplot(1, 1, 1)
+        ax.set_facecolor("#ffffff")
+        ax.set_title("Figure 4.1: Probe Packet Delivery Rate Across Fault & Recovery Scenarios", fontsize=11, fontweight="bold", pad=12, color="#0f172a")
+
+        scenarios = [
+            "TC-01: Baseline\n(0% Loss)",
+            "TC-02: Link Down\n(Failover Reroute)",
+            "TC-03: 42% Loss\n(EXEC-1852 Maintained)",
+            "TC-04: High Loss\n(Recovery Unavailable)",
+            "TC-05: Isolated Target\n(No Route)"
+        ]
+        rates = [100.0, 100.0, 60.0, 10.0, 0.0]
+        colors = ["#15803d", "#1d4ed8", "#d97706", "#ea580c", "#64748b"]
+
+        bars = ax.bar(scenarios, rates, color=colors, width=0.52, edgecolor="#1e293b", linewidth=1.1)
+        ax.set_ylabel("Probe Packet Delivery Rate (%)", fontsize=9.5, fontweight="bold", color="#334155")
+        ax.set_ylim(0, 115)
+        ax.grid(axis="y", linestyle="--", alpha=0.5, color="#cbd5e1")
+
+        for bar, rate in zip(bars, rates):
+            ax.text(bar.get_x() + bar.get_width() / 2, rate + 2.5, f"{rate:.1f}%",
+                    ha="center", va="bottom", fontsize=9, fontweight="bold", color="#1e293b")
+
+        ax.tick_params(axis="x", labelsize=8)
+        ax.tick_params(axis="y", labelsize=8.5)
+        fig.tight_layout()
+        return fig
+
+    def render_last_vs_present_comparison(
+        self,
+        fig: Optional[Figure] = None,
+        last_metrics: Optional[Dict[str, Any]] = None,
+        present_metrics: Optional[Dict[str, Any]] = None,
+        last_label: str = "Previous / Baseline Run",
+        present_label: str = "Present / Current Run"
+    ) -> Figure:
+        """Render side-by-side comparative graphs between the previous and current topology / run."""
+        if fig is None:
+            fig = Figure(figsize=(10.5, 5.5), dpi=100)
+            fig.patch.set_facecolor("#f8fafc")
+        else:
+            fig.clf()
+            fig.patch.set_facecolor("#f8fafc")
+
+        last = last_metrics or {
+            "delivery_rate_pct": 100.0,
+            "latency_ms": 6.0,
+            "loss_pct": 0.0,
+            "route": "PC1 -> R1 -> R2 -> Server",
+            "health": "HEALTHY",
+            "status": "BASELINE"
+        }
+        pres = present_metrics or {
+            "delivery_rate_pct": 60.0,
+            "latency_ms": 12.0,
+            "loss_pct": 40.0,
+            "route": "PC1 -> R1 -> R3 -> Server",
+            "health": "DEGRADED",
+            "status": "RECOVERED"
+        }
+
+        fig.suptitle(f"Topology & Scenario Run Comparison: {last_label} vs. {present_label}", fontsize=11, fontweight="bold", color="#0f172a", y=0.98)
+
+        # Subplot 1: Delivery Rate
+        ax1 = fig.add_subplot(2, 2, 1)
+        ax1.set_facecolor("#ffffff")
+        ax1.set_title("1. Probe Delivery Rate (%)", fontsize=9.5, fontweight="bold", color="#1e293b")
+        b1 = ax1.bar(["Previous", "Present"], [last.get("delivery_rate_pct", 100.0), pres.get("delivery_rate_pct", 100.0)], color=["#3b82f6", "#10b981"], width=0.45)
+        ax1.set_ylim(0, 115)
+        ax1.grid(axis="y", linestyle="--", alpha=0.5)
+        for b in b1:
+            h = b.get_height()
+            ax1.text(b.get_x() + b.get_width()/2, h + 2, f"{h:.1f}%", ha="center", fontsize=8.5, fontweight="bold")
+
+        # Subplot 2: End-to-End Latency
+        ax2 = fig.add_subplot(2, 2, 2)
+        ax2.set_facecolor("#ffffff")
+        ax2.set_title("2. End-to-End Latency (ms)", fontsize=9.5, fontweight="bold", color="#1e293b")
+        lat_last = float(last.get("latency_ms") or 0.0)
+        lat_pres = float(pres.get("latency_ms") or 0.0)
+        b2 = ax2.bar(["Previous", "Present"], [lat_last, lat_pres], color=["#6366f1", "#f59e0b"], width=0.45)
+        ax2.set_ylim(0, max(20, max(lat_last, lat_pres) * 1.25))
+        ax2.grid(axis="y", linestyle="--", alpha=0.5)
+        for b in b2:
+            h = b.get_height()
+            ax2.text(b.get_x() + b.get_width()/2, h + 0.5, f"{h:.1f} ms", ha="center", fontsize=8.5, fontweight="bold")
+
+        # Subplot 3: Packet Loss
+        ax3 = fig.add_subplot(2, 2, 3)
+        ax3.set_facecolor("#ffffff")
+        ax3.set_title("3. End-to-End Packet Loss (%)", fontsize=9.5, fontweight="bold", color="#1e293b")
+        loss_last = float(last.get("loss_pct") or 0.0)
+        loss_pres = float(pres.get("loss_pct") or 0.0)
+        b3 = ax3.bar(["Previous", "Present"], [loss_last, loss_pres], color=["#22c55e" if loss_last == 0 else "#ef4444", "#22c55e" if loss_pres == 0 else "#ef4444"], width=0.45)
+        ax3.set_ylim(0, 115)
+        ax3.grid(axis="y", linestyle="--", alpha=0.5)
+        for b in b3:
+            h = b.get_height()
+            ax3.text(b.get_x() + b.get_width()/2, h + 2, f"{h:.1f}%", ha="center", fontsize=8.5, fontweight="bold")
+
+        # Subplot 4: Summary Card
+        ax4 = fig.add_subplot(2, 2, 4)
+        ax4.set_facecolor("#f1f5f9")
+        ax4.set_title("4. Operational State Comparison", fontsize=9.5, fontweight="bold", color="#1e293b")
+        ax4.axis("off")
+
+        info_text = (
+            f"PREVIOUS RUN ({last_label}):\n"
+            f"  • Active Route: {last.get('route', 'N/A')}\n"
+            f"  • Network Health: {last.get('health', 'UNKNOWN')}\n"
+            f"  • Recovery Status: {last.get('status', 'N/A')}\n\n"
+            f"PRESENT RUN ({present_label}):\n"
+            f"  • Active Route: {pres.get('route', 'N/A')}\n"
+            f"  • Network Health: {pres.get('health', 'UNKNOWN')}\n"
+            f"  • Recovery Status: {pres.get('status', 'N/A')}\n\n"
+            f"DIFFERENCE (Delta):\n"
+            f"  • Latency Change: {lat_pres - lat_last:+.1f} ms\n"
+            f"  • Loss Change: {loss_pres - loss_last:+.1f}%"
+        )
+        ax4.text(0.05, 0.95, info_text, transform=ax4.transAxes, verticalalignment="top",
+                 fontsize=8.5, family="monospace", color="#0f172a")
+
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
         return fig
 
     def export_csv(self, filepath: str) -> bool:

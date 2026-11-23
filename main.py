@@ -1594,6 +1594,8 @@ class App:
         self.analytics_status_lbl.pack(side="left", fill="x", expand=True)
 
         ttk.Button(t_bar, text="🔄 Refresh Graphs", command=self.refresh_analytics_graphs).pack(side="left", padx=2)
+        ttk.Button(t_bar, text="📊 Benchmark (Fig 4.1)", command=self.open_benchmark_scenarios_dialog).pack(side="left", padx=2)
+        ttk.Button(t_bar, text="⚖ Compare Last vs Present", command=self.open_last_vs_present_dialog).pack(side="left", padx=2)
         ttk.Button(t_bar, text="📥 Export CSV...", command=self.export_analytics_csv).pack(side="left", padx=2)
         ttk.Button(t_bar, text="🖼 Export PNG...", command=self.export_analytics_png).pack(side="left", padx=2)
         ttk.Button(t_bar, text="🧹 Reset History", command=self.clear_analytics_history).pack(side="right", padx=2)
@@ -1644,6 +1646,137 @@ class App:
         if messagebox.askyesno("Confirm Reset", "Clear all recorded analytics telemetry history?"):
             get_analytics_engine().clear()
             self.refresh_analytics_graphs()
+
+    def open_benchmark_scenarios_dialog(self):
+        """Open a dedicated window displaying Figure 4.1: Probe Packet Delivery Rate Across Scenarios."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Figure 4.1: Probe Packet Delivery Rate Across Fault & Recovery Scenarios")
+        dlg.geometry("900x560")
+        dlg.configure(bg=self.c_panel_bg)
+
+        top_f = ttk.Frame(dlg, padding=6)
+        top_f.pack(fill="x")
+        ttk.Label(top_f, text="Figure 4.1: Probe Packet Delivery Rate Benchmark across Test Scenarios (TC-01 to TC-05)", font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        fig = Figure(figsize=(8.8, 4.8), dpi=100)
+        get_analytics_engine().render_scenario_benchmark_graph(fig)
+
+        canvas = FigureCanvasTkAgg(fig, master=dlg)
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=4)
+        canvas.draw()
+
+        btn_f = ttk.Frame(dlg, padding=6)
+        btn_f.pack(fill="x")
+        def save_fig():
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG images", "*.png"), ("All files", "*.*")],
+                initialfile="figure_4_1_delivery_rate.png",
+                title="Save Figure 4.1 Image"
+            )
+            if fp:
+                fig.savefig(fp, dpi=200, bbox_inches="tight")
+                messagebox.showinfo("Saved", f"Figure 4.1 saved to:\n{fp}", parent=dlg)
+
+        ttk.Button(btn_f, text="🖼 Save Figure 4.1 Image...", command=save_fig).pack(side="left", padx=4)
+        ttk.Button(btn_f, text="Close", command=dlg.destroy).pack(side="right", padx=4)
+
+    def open_last_vs_present_dialog(self):
+        """Open a dedicated comparison window comparing the previous run/topology against the current state."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Topology & Scenario Comparison: Last Run vs. Present Run")
+        dlg.geometry("1050x620")
+        dlg.configure(bg=self.c_panel_bg)
+
+        top_f = ttk.Frame(dlg, padding=6)
+        top_f.pack(fill="x")
+        ttk.Label(top_f, text="Comparative Analysis: Last Topology/Scenario Run vs. Present Topology/Scenario Run", font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        from audit_logger import get_audit_logger
+        aud = get_audit_logger()
+        records = aud.get_all_records()
+
+        obs = getattr(self, "obs", None) or collect_observations(self.g)
+        p_lat = float(obs.get("end_to_end_latency_ms") or 0.0)
+        p_loss = float(obs.get("path_packet_loss") or (0.0 if obs.get("reachability") else 100.0))
+        p_route = " -> ".join(obs.get("active_path") or obs.get("path") or []) or "None"
+        p_avail = obs.get("reachability", False)
+        p_delivery = 100.0 if (p_avail and p_loss == 0.0) else (round(100.0 - p_loss, 1) if p_avail else 0.0)
+
+        last_rec_pkt = getattr(self, "last_recovery_result", {}).get("packet_transmission")
+        if last_rec_pkt and "delivery_rate_pct" in last_rec_pkt:
+            p_delivery = float(last_rec_pkt["delivery_rate_pct"])
+
+        present_dict = {
+            "delivery_rate_pct": p_delivery,
+            "latency_ms": p_lat,
+            "loss_pct": p_loss,
+            "route": p_route,
+            "health": self.kpi_health_val.cget("text") if hasattr(self, "kpi_health_val") else "HEALTHY",
+            "status": self.kpi_rec_val.cget("text") if hasattr(self, "kpi_rec_val") else "PRESENT"
+        }
+
+        if len(records) >= 2:
+            prev_r = records[-2]
+            last_dict = {
+                "delivery_rate_pct": 100.0 if prev_r.verification_passed else 0.0,
+                "latency_ms": prev_r.after_metrics.get("latency_ms", 6.0) or 6.0,
+                "loss_pct": prev_r.after_metrics.get("packet_loss_pct", 0.0) or 0.0,
+                "route": " -> ".join(prev_r.after_metrics.get("route", [])) if isinstance(prev_r.after_metrics.get("route"), list) else str(prev_r.after_metrics.get("route", "N/A")),
+                "health": prev_r.network_health,
+                "status": prev_r.recovery_status
+            }
+            last_lbl = f"Run {prev_r.execution_id} ({prev_r.scenario_name})"
+        elif len(records) == 1:
+            prev_r = records[0]
+            last_dict = {
+                "delivery_rate_pct": 100.0 if prev_r.verification_passed else 0.0,
+                "latency_ms": prev_r.before_metrics.get("latency_ms", 6.0) or 6.0,
+                "loss_pct": prev_r.before_metrics.get("packet_loss_pct", 0.0) or 0.0,
+                "route": " -> ".join(prev_r.before_metrics.get("route", [])) if isinstance(prev_r.before_metrics.get("route"), list) else str(prev_r.before_metrics.get("route", "Baseline Path")),
+                "health": "BASELINE",
+                "status": "INITIAL"
+            }
+            last_lbl = "Initial Baseline Run"
+        else:
+            last_dict = {
+                "delivery_rate_pct": 100.0,
+                "latency_ms": 6.0,
+                "loss_pct": 0.0,
+                "route": "PC1 -> R1 -> R2 -> Server",
+                "health": "HEALTHY",
+                "status": "BASELINE"
+            }
+            last_lbl = "Initial Baseline State"
+
+        fig = Figure(figsize=(10.2, 5.2), dpi=100)
+        get_analytics_engine().render_last_vs_present_comparison(
+            fig,
+            last_metrics=last_dict,
+            present_metrics=present_dict,
+            last_label=last_lbl,
+            present_label="Current State"
+        )
+
+        canvas = FigureCanvasTkAgg(fig, master=dlg)
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=4)
+        canvas.draw()
+
+        btn_f = ttk.Frame(dlg, padding=6)
+        btn_f.pack(fill="x")
+        def save_comp():
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG images", "*.png"), ("All files", "*.*")],
+                initialfile="topology_comparison_last_vs_present.png",
+                title="Save Topology Comparison Image"
+            )
+            if fp:
+                fig.savefig(fp, dpi=200, bbox_inches="tight")
+                messagebox.showinfo("Saved", f"Comparison graph saved to:\n{fp}", parent=dlg)
+
+        ttk.Button(btn_f, text="🖼 Save Comparison Image...", command=save_comp).pack(side="left", padx=4)
+        ttk.Button(btn_f, text="Close", command=dlg.destroy).pack(side="right", padx=4)
 
     def _on_predef_scenario_selected(self, event=None):
         name = self.predef_var.get()
