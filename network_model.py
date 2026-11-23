@@ -1,5 +1,6 @@
 """Graph-based virtual network model and topology management."""
 import json
+import ipaddress
 import networkx as nx
 from fault_registry import FaultRegistry, get_fault_registry
 
@@ -668,4 +669,70 @@ def clear_active_route(g):
     """Clear the active forwarding route from network state."""
     g.graph.pop("active_path", None)
     g.graph.pop("activated_route", None)
+
+
+def resolve_gateway_node(g, host, gw_str):
+    """
+    Resolve a gateway configuration string (e.g. 'R1' or '192.168.1.1') to a router node.
+    
+    In real IPv4 networking, end-devices configure their Default Gateway as an IPv4 address
+    belonging to a directly connected router interface on the same local subnet.
+    In simulator environments, device labels (e.g. 'R1') are often also used as shorthand.
+    This resolver handles both transparently.
+
+    Returns:
+        (router_node, is_valid, reason)
+        - router_node (str or None): name of the router node if resolved, else None.
+        - is_valid (bool): True if gateway is valid, reachable, and on proper subnet.
+        - reason (str): Human-readable error description if invalid, or "" if valid.
+    """
+    if not gw_str or not str(gw_str).strip() or str(gw_str).strip() == "N/A":
+        return None, False, f"Default gateway is not configured for '{host}'"
+    
+    gw_clean = str(gw_str).strip()
+    
+    # 1. Direct node name match (e.g. "R1")
+    if gw_clean in g.nodes:
+        node_type = g.nodes[gw_clean].get("type")
+        if node_type != "Router":
+            return gw_clean, False, f"Gateway node '{gw_clean}' is of type '{node_type}', not a Router"
+        if host and host in g.nodes and not nx.has_path(g, host, gw_clean):
+            return gw_clean, False, f"No physical path between host '{host}' and gateway '{gw_clean}'"
+        return gw_clean, True, ""
+    
+    # 2. IP address match (e.g. "192.168.1.1")
+    matching_router = None
+    for n, d in g.nodes(data=True):
+        if d.get("type") == "Router" and d.get("ip") == gw_clean:
+            matching_router = n
+            break
+            
+    if matching_router is not None:
+        if host and host in g.nodes:
+            if not nx.has_path(g, host, matching_router):
+                return matching_router, False, f"No physical path between host '{host}' and gateway '{gw_clean}' ({matching_router})"
+            # Check subnet match if host has IP and subnet mask
+            host_data = g.nodes[host]
+            host_ip = host_data.get("ip")
+            host_mask = host_data.get("subnet_mask", "255.255.255.0")
+            if host_ip:
+                try:
+                    host_net = ipaddress.IPv4Network(f"{host_ip}/{host_mask}", strict=False)
+                    gw_addr = ipaddress.IPv4Address(gw_clean)
+                    if gw_addr not in host_net:
+                        return matching_router, False, (
+                            f"Gateway IP '{gw_clean}' is not on the same local subnet as host '{host}' ({host_net})"
+                        )
+                except Exception:
+                    pass
+        return matching_router, True, ""
+    
+    # Check if gw_clean looks like an IPv4 address
+    try:
+        ipaddress.IPv4Address(gw_clean)
+        return None, False, f"Gateway IP '{gw_clean}' does not match any local router interface in the network topology"
+    except ValueError:
+        pass
+        
+    return None, False, f"Gateway node '{gw_clean}' does not exist in the network topology"
 

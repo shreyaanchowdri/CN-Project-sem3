@@ -21,7 +21,8 @@ from network_model import (
     resolve_endpoints,
     get_active_route,
     set_active_route,
-    calculate_route_metrics
+    calculate_route_metrics,
+    resolve_gateway_node
 )
 from monitoring import (
     collect_observations,
@@ -152,7 +153,7 @@ def transmit_test_packets(g: nx.Graph, source: Optional[str] = None, target: Opt
     # Check host default gateway validity
     if src in g.nodes and g.nodes[src].get("type") in ("PC", "Laptop"):
         gw = g.nodes[src].get("gateway")
-        gw_valid = (gw in g.nodes and g.nodes[gw].get("type") == "Router" and nx.has_path(g, src, gw))
+        gw_router, gw_valid, gw_reason = resolve_gateway_node(g, src, gw)
         if not gw_valid:
             packet_details = []
             for i in range(1, count + 1):

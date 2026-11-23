@@ -14,7 +14,8 @@ from network_model import (
     discover_routes,
     resolve_endpoints,
     get_active_route,
-    path_is_usable
+    path_is_usable,
+    resolve_gateway_node
 )
 from diagnostics import DiagnosticFinding
 
@@ -326,7 +327,8 @@ def generate_recovery_plan(
             old_gw = g.nodes[host].get("gateway", "Unknown") if host in g.nodes else "Unknown"
 
             # Only plan restoration if gateway is actually misconfigured
-            if old_gw != valid_gw:
+            resolved_gw, is_valid, _ = resolve_gateway_node(g, host, old_gw)
+            if not is_valid or (resolved_gw != valid_gw and old_gw != valid_gw):
                 aid = next_action_id()
                 gateway_action_ids.append(aid)
                 actions.append(RecoveryAction(

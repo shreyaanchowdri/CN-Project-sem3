@@ -13,7 +13,8 @@ from network_model import (
     select_best_route,
     resolve_endpoints,
     get_active_route,
-    path_is_usable
+    path_is_usable,
+    resolve_gateway_node
 )
 
 
@@ -202,42 +203,26 @@ def collect_observations(g, state=None, source=None, target=None, latency_thresh
     for node, data in g.nodes(data=True):
         if data.get("type") in ("PC", "Laptop"):
             node_gw = data.get("gateway", gw)
-            if node_gw not in g.nodes:
+            gw_router, gw_valid, gw_err = resolve_gateway_node(g, node, node_gw)
+            if not gw_valid:
                 invalid_gateways.append({
                     "host": node,
                     "configured_gateway": node_gw,
-                    "reason": f"Gateway node '{node_gw}' does not exist in the network topology"
+                    "reason": gw_err
                 })
             else:
-                gw_type = g.nodes[node_gw].get("type")
-                if gw_type != "Router":
+                gw_path = shortest_path(g, node, gw_router)
+                if not gw_path:
                     invalid_gateways.append({
                         "host": node,
                         "configured_gateway": node_gw,
-                        "reason": f"Gateway node '{node_gw}' is of type '{gw_type}', not a Router"
+                        "reason": f"Path between host '{node}' and gateway '{node_gw}' is DOWN"
                     })
-                elif not nx.has_path(g, node, node_gw):
-                    invalid_gateways.append({
-                        "host": node,
-                        "configured_gateway": node_gw,
-                        "reason": f"No physical path between host '{node}' and gateway '{node_gw}'"
-                    })
-                else:
-                    gw_path = shortest_path(g, node, node_gw)
-                    if not gw_path:
-                        invalid_gateways.append({
-                            "host": node,
-                            "configured_gateway": node_gw,
-                            "reason": f"Path between host '{node}' and gateway '{node_gw}' is DOWN"
-                        })
 
     if host_to_audit:
         h_gw = g.nodes[host_to_audit].get("gateway", gw)
-        gateway_ok = not any(ig["host"] == host_to_audit for ig in invalid_gateways) and (
-            h_gw in ("R1", "192.168.1.1") or (
-                h_gw in g.nodes and g.nodes[h_gw].get("type") == "Router" and nx.has_path(g, host_to_audit, h_gw)
-            )
-        )
+        h_router, h_valid, _ = resolve_gateway_node(g, host_to_audit, h_gw)
+        gateway_ok = not any(ig["host"] == host_to_audit for ig in invalid_gateways) and h_valid
     else:
         gateway_ok = len(invalid_gateways) == 0
 

@@ -38,7 +38,8 @@ from network_model import (
     resolve_endpoints,
     generate_unique_device_name,
     get_active_route,
-    set_active_route
+    set_active_route,
+    resolve_gateway_node
 )
 from fault_injection import (
     inject_fault,
@@ -75,6 +76,7 @@ from monitoring import (
 from diagnostics import diagnose, DiagnosticFinding, format_diagnosis_report, generate_diagnosis_report
 from recovery import (
     recover,
+    transmit_test_packets,
     format_recovery_report,
     generate_recovery_report,
     format_verification_report,
@@ -4679,6 +4681,72 @@ class DynamicEndpointsAndPacketTransmissionTests(unittest.TestCase):
         self.assertIn("Recovery Status             : RECOVERY UNAVAILABLE", rep_c)
         self.assertIn("Corrective Actions Executed : 0", rep_c)
         self.assertIn("Action Executed             : NO", rep_c)
+
+
+class IPv4DefaultGatewayInteroperabilityTests(unittest.TestCase):
+    """Verifies dual-mode Default Gateway support: Device Labels (R1) and IPv4 Addresses (192.168.1.1)."""
+
+    def test_resolve_gateway_node_name(self):
+        """1. Device name 'R1' resolves cleanly to router 'R1'."""
+        g = build_network()
+        router, valid, err = resolve_gateway_node(g, "PC1", "R1")
+        self.assertEqual(router, "R1")
+        self.assertTrue(valid)
+        self.assertEqual(err, "")
+
+    def test_resolve_gateway_ipv4_address(self):
+        """2. IPv4 address '192.168.1.1' resolves to router 'R1' on the 192.168.1.0/24 subnet."""
+        g = build_network()
+        router, valid, err = resolve_gateway_node(g, "PC1", "192.168.1.1")
+        self.assertEqual(router, "R1")
+        self.assertTrue(valid)
+        self.assertEqual(err, "")
+
+    def test_resolve_gateway_wrong_subnet_ip(self):
+        """3. Gateway IP from a different subnet (e.g. 10.0.1.1) is flagged as invalid."""
+        g = build_network()
+        router, valid, err = resolve_gateway_node(g, "PC1", "10.0.1.1")
+        self.assertEqual(router, "R2")
+        self.assertFalse(valid)
+        self.assertIn("not on the same local subnet", err)
+
+    def test_resolve_gateway_nonexistent_ip(self):
+        """4. Unassigned IP address (e.g. 192.168.1.99) is flagged as nonexistent in topology."""
+        g = build_network()
+        router, valid, err = resolve_gateway_node(g, "PC1", "192.168.1.99")
+        self.assertIsNone(router)
+        self.assertFalse(valid)
+        self.assertIn("does not match any local router interface", err)
+
+    def test_monitoring_and_diagnosis_with_ipv4_gateway(self):
+        """5. Monitoring and diagnosis recognize '192.168.1.1' as a healthy valid gateway."""
+        g = build_network()
+        g.nodes["PC1"]["gateway"] = "192.168.1.1"
+        obs = collect_observations(g)
+        self.assertTrue(obs["gateway_ok"])
+        self.assertEqual(obs["invalid_gateways"], [])
+        findings = diagnose(obs)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].root_cause, "No fault detected")
+
+    def test_probe_packet_transmission_with_ipv4_gateway(self):
+        """6. Probe packets transmit at 100% delivery when PC1 uses '192.168.1.1'."""
+        g = build_network()
+        g.nodes["PC1"]["gateway"] = "192.168.1.1"
+        res = transmit_test_packets(g, source="PC1", target="Server", count=5)
+        self.assertEqual(res["delivery_rate_pct"], 100.0)
+        self.assertEqual(res["packets_delivered"], 5)
+        for p in res["packet_details"]:
+            self.assertEqual(p["status"], "DELIVERED")
+
+    def test_recover_and_verify_with_ipv4_gateway(self):
+        """7. Post-recovery verification passes with '192.168.1.1' default gateway."""
+        g = build_network()
+        g.nodes["PC1"]["gateway"] = "192.168.1.1"
+        res = recover(g, source="PC1", target="Server")
+        self.assertTrue(res["gateway_valid"])
+        self.assertTrue(res["verification_passed"])
+        self.assertEqual(res["verification_checks"]["default_gateway_validity"], "PASS")
 
 
 if __name__ == "__main__":
