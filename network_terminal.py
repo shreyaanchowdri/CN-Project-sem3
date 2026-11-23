@@ -11,7 +11,7 @@ from tkinter import ttk
 from typing import Any, Dict, List, Optional
 import networkx as nx
 
-from network_model import discover_routes, calculate_route_metrics, get_active_route
+from network_model import discover_routes, calculate_route_metrics, get_active_route, resolve_gateway_node
 from monitoring import collect_observations
 from diagnostics import diagnose, format_diagnosis_report
 from recovery import recover, format_recovery_report
@@ -293,6 +293,12 @@ Simulated Network Diagnostic Terminal Commands:
         ip = d.get("ip", "192.168.1.10")
         mask = d.get("mask", "255.255.255.0")
         gw = d.get("gateway", "192.168.1.1")
+        if gw in self.g.nodes and self.g.nodes[gw].get("type") == "Router":
+            gw_ip = self.g.nodes[gw].get("ip")
+            if gw_ip:
+                gw = gw_ip
+        elif gw == "R1":
+            gw = "192.168.1.1"
         dns = d.get("dns_server", "192.168.1.1")
         dev_type = d.get("type", "Device")
 
@@ -491,8 +497,8 @@ Ethernet adapter Local Area Connection:
 
         # Gateway check on current host
         host_d = self.g.nodes[self.current_host]
-        host_gw = host_d.get("gateway", "R1")
-        gw_ok = host_gw in self.g.nodes and self.g.nodes[host_gw].get("type") == "Router" and nx.has_path(self.g, self.current_host, host_gw)
+        host_gw = host_d.get("gateway", "192.168.1.1")
+        gw_router, gw_ok, _ = resolve_gateway_node(self.g, self.current_host, host_gw)
 
         packets_sent = 4
         packets_received = 0

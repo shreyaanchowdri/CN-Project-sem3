@@ -31,7 +31,7 @@ DEFAULT_NODE_DETAILS = {
         "kind": "End device",
         "ip": "192.168.1.10",
         "subnet_mask": "255.255.255.0",
-        "gateway": "R1",
+        "gateway": "192.168.1.1",
         "is_default": True
     },
     "R1": {
@@ -85,7 +85,7 @@ def build_network():
         details.setdefault("type", "Router" if node.startswith("R") else ("PC" if "PC" in node else "Server"))
         details.setdefault("ip", "192.168.1.1")
         details.setdefault("subnet_mask", "255.255.255.0")
-        details.setdefault("gateway", "R1" if details["type"] in ("PC", "Server") else "N/A")
+        details.setdefault("gateway", "192.168.1.1" if details["type"] in ("PC", "Laptop") else ("192.168.1.1" if details["type"] == "Server" else "N/A"))
         details["is_default"] = True
         g.add_node(node, **details)
 
@@ -100,7 +100,7 @@ def build_network():
         g.add_edge(a, b, cost=cost, status="UP", latency_ms=latency, packet_loss=0.0)
 
     g.graph.update(
-        gateway="R1",
+        gateway="192.168.1.1",
         dns_available=True,
         scenario="No fault",
         node_positions=dict(DEFAULT_POSITIONS),

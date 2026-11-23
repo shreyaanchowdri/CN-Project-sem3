@@ -2399,7 +2399,14 @@ class App:
         self.insp_dev_type.set(d.get("type", "PC"))
         self.insp_dev_ip.set(d.get("ip", ""))
         self.insp_dev_mask.set(d.get("subnet_mask", "255.255.255.0"))
-        self.insp_dev_gw.set(d.get("gateway", "R1"))
+        gw_val = d.get("gateway", "192.168.1.1")
+        if gw_val in self.g.nodes and self.g.nodes[gw_val].get("type") == "Router":
+            gw_ip = self.g.nodes[gw_val].get("ip")
+            if gw_ip:
+                gw_val = gw_ip
+        elif gw_val == "R1":
+            gw_val = "192.168.1.1"
+        self.insp_dev_gw.set(gw_val)
         self.insp_dev_dns.set(d.get("dns_server", "192.168.1.1"))
         self.insp_tabs.select(0)
 
@@ -3177,7 +3184,14 @@ class App:
             type_var.set(d.get("type", "PC"))
             ip_var.set(d.get("ip", ""))
             mask_var.set(d.get("subnet_mask", "255.255.255.0"))
-            gw_var.set(d.get("gateway", "R1"))
+            gw_val = d.get("gateway", "192.168.1.1")
+            if gw_val in self.g.nodes and self.g.nodes[gw_val].get("type") == "Router":
+                gw_ip = self.g.nodes[gw_val].get("ip")
+                if gw_ip:
+                    gw_val = gw_ip
+            elif gw_val == "R1":
+                gw_val = "192.168.1.1"
+            gw_var.set(gw_val)
 
         load_fields(devices[0])
 
