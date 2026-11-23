@@ -696,7 +696,10 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
         status_msg = "RECOVERY VERIFIED"
 
     if status_msg == "SERVICE MAINTAINED":
-        reason_str = "A healthy alternative route was already active; no routing change was required."
+        if (post_obs.get("path_packet_loss", 0.0) or 0.0) > 0.0 or (post_obs.get("end_to_end_latency_ms", 0.0) or 0.0) > 100.0 or not verified:
+            reason_str = "A surviving alternative route was active, but operates in degraded condition with no lower-loss path available."
+        else:
+            reason_str = "A healthy alternative route was already active; no routing change was required."
     elif status_msg in ("RECOVERY UNAVAILABLE", "OPTIMIZATION UNAVAILABLE"):
         reason_str = "No feasible automated recovery path or corrective action exists for the current fault state."
         verified = False

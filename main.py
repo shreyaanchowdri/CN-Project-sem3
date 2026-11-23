@@ -2732,6 +2732,8 @@ class App:
                 self.update_header_status("DEGRADED", "PARTIAL RECOVERY: FAULT BYPASSED (DEGRADED)")
             else:
                 self.update_header_status("HEALTHY", "RECOVERY VERIFIED & STABLE")
+        elif result.get("status") == "SERVICE MAINTAINED":
+            self.update_header_status("DEGRADED", "SERVICE MAINTAINED (DEGRADED ROUTE ACTIVE)")
         elif result.get("status") == "PARTIAL RECOVERY":
             self.update_header_status("DEGRADED", "PARTIAL RECOVERY: FAULT BYPASSED (DEGRADED)")
         elif result.get("status") == "OPTIMIZATION UNAVAILABLE":
