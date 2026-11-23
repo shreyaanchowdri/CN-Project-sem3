@@ -510,27 +510,33 @@ def recover(g, state=None, findings=None, source=None, target=None, plan=None, p
 
     if has_latency_fault and not latency_success:
         curr_lat = sum(g[u][v].get("latency_ms", 2.0) for u, v in zip(current_active, current_active[1:])) if current_active and len(current_active) >= 2 else 999.0
-        msg = f"High-latency optimization UNAVAILABLE: No alternative route offers lower latency than the current path ({curr_lat} ms)."
-        actions_executed_log.append(msg)
-        action_details.append({
-            "fault": "High latency",
-            "action": "Optimization unavailable",
-            "before": f"Current path latency: {curr_lat} ms",
-            "after": "No lower-latency alternative exists"
-        })
-        latency_success = False
+        if curr_lat <= 100.0 and not action_executed:
+            latency_success = True
+        else:
+            msg = f"High-latency optimization UNAVAILABLE: No alternative route offers lower latency than the current path ({curr_lat} ms)."
+            actions_executed_log.append(msg)
+            action_details.append({
+                "fault": "High latency",
+                "action": "Optimization unavailable",
+                "before": f"Current path latency: {curr_lat} ms",
+                "after": "No lower-latency alternative exists"
+            })
+            latency_success = False
 
     if has_loss_fault and not loss_success:
         curr_loss = max(g[u][v].get("packet_loss", 0.0) for u, v in zip(current_active, current_active[1:])) if current_active and len(current_active) >= 2 else 100.0
-        msg = f"Packet loss recovery UNAVAILABLE: No alternative route offers lower packet loss than the current path ({curr_loss}%)."
-        actions_executed_log.append(msg)
-        action_details.append({
-            "fault": "Packet loss",
-            "action": "Recovery unavailable",
-            "before": f"Current path loss: {curr_loss}%",
-            "after": "No lower-loss alternative exists"
-        })
-        loss_success = False
+        if curr_loss == 0.0 and not action_executed:
+            loss_success = True
+        else:
+            msg = f"Packet loss recovery UNAVAILABLE: No alternative route offers lower packet loss than the current path ({curr_loss}%)."
+            actions_executed_log.append(msg)
+            action_details.append({
+                "fault": "Packet loss",
+                "action": "Recovery unavailable",
+                "before": f"Current path loss: {curr_loss}%",
+                "after": "No lower-loss alternative exists"
+            })
+            loss_success = False
 
     if has_link_failure and (not plan.selected_route or plan.decision == RecoveryDecision.NO_FEASIBLE_RECOVERY):
         down_summary = ", ".join(failed_links) if failed_links else (", ".join(affected_links) if affected_links else "failed link(s)")

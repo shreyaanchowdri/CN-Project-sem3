@@ -380,14 +380,15 @@ def generate_recovery_plan(
             route_related_findings.append(getattr(f, "finding_id", "DIAG-LOSS"))
 
     # Determine whether a route switch is genuinely necessary:
+    curr_lat = sum(g[u][v].get("latency_ms", 2.0) for u, v in zip(current_active, current_active[1:])) if current_active and len(current_active) >= 2 else 0.0
+    curr_loss = max(g[u][v].get("packet_loss", 0.0) for u, v in zip(current_active, current_active[1:])) if current_active and len(current_active) >= 2 else 0.0
+
     if has_link_failure or has_latency_fault or has_loss_fault:
         if not active_is_usable or active_crosses_failed_link:
             route_change_needed = True
             route_action_type = "FAILOVER_REROUTE"
         elif best_route and current_active and best_route["path"] != current_active:
             # Check if best route offers strictly superior performance
-            curr_lat = sum(g[u][v].get("latency_ms", 2.0) for u, v in zip(current_active, current_active[1:]))
-            curr_loss = max(g[u][v].get("packet_loss", 0.0) for u, v in zip(current_active, current_active[1:]))
             if (has_latency_fault and best_route["latency_ms"] < curr_lat) or \
                (has_loss_fault and best_route.get("probabilistic_loss", 0) < curr_loss):
                 route_change_needed = True
@@ -432,7 +433,8 @@ def generate_recovery_plan(
     elif (has_link_failure or has_partition) and not best_route and not active_is_usable:
         decision = RecoveryDecision.NO_FEASIBLE_RECOVERY
         outcome = f"Complete network partition between {src} and {dst}. No alternative route exists; manual physical repair required."
-    elif has_link_failure and active_is_usable and not active_crosses_failed_link and not route_change_needed and not has_gateway_fault and not has_dns_fault:
+    elif (has_link_failure and active_is_usable and not active_crosses_failed_link and not route_change_needed and not has_gateway_fault and not has_dns_fault) or \
+         ((has_loss_fault or has_latency_fault) and active_is_usable and not route_change_needed and curr_loss == 0.0 and curr_lat <= 100.0 and not has_gateway_fault and not has_dns_fault):
         decision = RecoveryDecision.SERVICE_ALREADY_MAINTAINED
         route_str = " -> ".join(current_active) if current_active else "None"
         outcome = f"Service is maintained through existing active route ({route_str}). Zero corrective actions required."
